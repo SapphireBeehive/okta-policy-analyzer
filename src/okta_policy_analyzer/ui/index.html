@@ -1,0 +1,492 @@
+<title>Okta Policy Workbench</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#f4f6f9; --surface:#ffffff; --surface-2:#eaeef3; --ink:#1a232e; --muted:#5f6b78; --line:#d6dde6;
+  --accent:#1f5fa8; --accent-ink:#ffffff; --accent-soft:#e3edf9;
+  --ok:#1e7f4f; --ok-soft:#e1f2e8; --bad:#b4322a; --bad-soft:#f8e3e1; --warn:#a86a0a; --warn-soft:#f8ecd4; --info:#4b5a6b; --info-soft:#e7ebf0;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --rail:220px; --radius:6px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0f1419; --surface:#171d24; --surface-2:#1f2731; --ink:#e4e9ef; --muted:#97a3b0; --line:#2b3542;
+  --accent:#6ea6ea; --accent-ink:#0f1419; --accent-soft:#1c2c40;
+  --ok:#4fc283; --ok-soft:#14301f; --bad:#f08a80; --bad-soft:#3b1a17; --warn:#e2a93b; --warn-soft:#3a2a0e; --info:#aab5c2; --info-soft:#232c36;
+}}
+:root[data-theme="dark"]{
+  --ground:#0f1419; --surface:#171d24; --surface-2:#1f2731; --ink:#e4e9ef; --muted:#97a3b0; --line:#2b3542;
+  --accent:#6ea6ea; --accent-ink:#0f1419; --accent-soft:#1c2c40;
+  --ok:#4fc283; --ok-soft:#14301f; --bad:#f08a80; --bad-soft:#3b1a17; --warn:#e2a93b; --warn-soft:#3a2a0e; --info:#aab5c2; --info-soft:#232c36;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.45 var(--sans)}
+a{color:var(--accent)}
+button,input,textarea,select{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:var(--rail) 1fr;min-height:100%}
+.rail{background:var(--surface);border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:4px;position:sticky;top:env(safe-area-inset-top,0px);align-self:start;height:100vh}
+.brand{font-weight:600;padding:4px 8px 12px;letter-spacing:.01em}
+.brand small{display:block;color:var(--muted);font-weight:400;font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{all:unset;cursor:pointer;padding:8px 10px;border-radius:var(--radius);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.nav button:hover{background:var(--surface-2)}
+.nav button[aria-current="page"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.nav button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.nav .count{font:12px var(--mono);color:var(--muted);background:var(--surface-2);padding:1px 6px;border-radius:10px}
+.railfoot{margin-top:auto;font-size:12px;color:var(--muted);padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+main{padding:20px 24px 48px;min-width:0}
+h1{font-size:20px;font-weight:600;margin:0 0 4px;text-wrap:balance}
+h2{font-size:15px;font-weight:600;margin:24px 0 8px}
+h3{font-size:14px;font-weight:600;margin:16px 0 6px}
+.lede{color:var(--muted);margin:0 0 16px;max-width:70ch}
+.pill{display:inline-block;font:500 11px/1 var(--mono);letter-spacing:.04em;padding:4px 7px;border-radius:4px;background:var(--info-soft);color:var(--info);white-space:nowrap}
+.pill.PROVED,.pill.LESS_PERMISSIVE,.pill.FIX_PROVED,.pill.ALREADY_HOLDS,.pill.ACTIVE{background:var(--ok-soft);color:var(--ok)}
+.pill.VIOLATED,.pill.HIGH,.pill.MORE_PERMISSIVE,.pill.DENY,.pill.FIX_INSUFFICIENT,.pill.UNFIXABLE,.pill.ERROR{background:var(--bad-soft);color:var(--bad)}
+.pill.VACUOUS,.pill.UNPARSED,.pill.MEDIUM,.pill.INCOMPARABLE,.pill.INACTIVE{background:var(--warn-soft);color:var(--warn)}
+.pill.LOW,.pill.INFO,.pill.EQUIVALENT{background:var(--info-soft);color:var(--info)}
+.stripe{border-left:3px solid var(--line)}
+.stripe.VIOLATED,.stripe.HIGH{border-left-color:var(--bad)}
+.stripe.PROVED{border-left-color:var(--ok)}
+.stripe.VACUOUS,.stripe.UNPARSED,.stripe.MEDIUM{border-left-color:var(--warn)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.stack{display:flex;flex-direction:column;gap:10px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px}
+.tile .n{font:500 22px/1.1 var(--mono);font-variant-numeric:tabular-nums}
+.tile .l{color:var(--muted);font-size:12px;margin-top:4px}
+.mono{font-family:var(--mono);font-size:12.5px}
+pre{font:12px/1.5 var(--mono);background:var(--surface-2);border-radius:var(--radius);padding:10px 12px;overflow-x:auto;margin:6px 0;white-space:pre-wrap;word-break:break-word}
+pre.json{white-space:pre}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;letter-spacing:.03em;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.clickable{cursor:pointer}
+tr.clickable:hover td{background:var(--surface-2)}
+tr.selected td{background:var(--accent-soft)}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.btn{cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:var(--radius);padding:7px 12px;font-weight:500}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+textarea,input[type=text]{width:100%;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);padding:9px 10px}
+textarea{min-height:64px;resize:vertical}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{cursor:pointer;border:1px solid var(--line);background:var(--surface-2);border-radius:14px;padding:3px 10px;font-size:12px}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+details>summary{cursor:pointer;list-style:none;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+details>summary::-webkit-details-marker{display:none}
+details>summary::before{content:"▸";color:var(--muted);font-size:12px}
+details[open]>summary::before{content:"▾"}
+.inv .sentence{font-weight:500;flex:1;min-width:200px}
+.reading{color:var(--muted);font-size:13px;margin:8px 0 4px;max-width:90ch}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;font-size:13px}
+.kv .k{color:var(--muted)}
+.cx{background:var(--bad-soft);border-radius:var(--radius);padding:8px 10px;margin:6px 0}
+.cx .who{font-family:var(--mono);font-size:12px}
+.impact{display:grid;gap:4px;font-size:13px}
+.impact .lost::before{content:"−  ";color:var(--ok);font-family:var(--mono)}
+.impact .stronger::before{content:"^  ";color:var(--ok);font-family:var(--mono)}
+.impact .gain::before{content:"+  ";color:var(--bad);font-family:var(--mono)}
+.impact .weaker::before{content:"~  ";color:var(--bad);font-family:var(--mono)}
+.toast{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px));right:16px;background:var(--ink);color:var(--ground);padding:10px 14px;border-radius:var(--radius);max-width:min(480px,calc(100vw - 32px));z-index:10;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.banner{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn);border-radius:var(--radius);padding:8px 12px;margin-bottom:12px}
+.strength{font-family:var(--mono);font-size:12px}
+.filter{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 12px}
+.filter input[type=text]{max-width:320px}
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.rulecard{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;background:var(--surface)}
+.rulecard.dead{opacity:.7}
+.cond{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.cond span{background:var(--surface-2);border-radius:4px;padding:2px 7px;font-size:12px}
+.modal{position:fixed;inset:0;background:rgba(10,14,20,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+.modal .box{background:var(--surface);border-radius:8px;padding:18px;max-width:560px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+@media (max-width:760px){
+  .app{grid-template-columns:1fr}
+  .rail{position:static;height:auto;flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--line);padding:10px 12px}
+  .brand{width:100%;padding-bottom:6px}
+  .nav{flex-direction:row;flex-wrap:wrap}
+  .railfoot{display:none}
+  main{padding:16px 16px 40px}
+  .split{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion: no-preference){ .nav button, .btn{transition:background .12s} }
+</style>
+<!--DATA-->
+<div class="app">
+  <aside class="rail">
+    <div class="brand">Okta Policy Workbench<small id="brand-org">loading…</small></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="railfoot">
+      <span id="foot-snapshot"></span>
+      <span id="foot-mode"></span>
+      <a href="/api/export" id="export-link" download="okta-policy-review.html">Export read-only page</a>
+    </div>
+  </aside>
+  <main id="main"><p class="muted">Loading…</p></main>
+</div>
+<div id="toast" class="toast" hidden></div>
+<div id="modal" hidden></div>
+
+<script>
+(() => {
+"use strict";
+const STATIC = !!window.__DATA__;
+const D = { state:null, policies:null, principals:null, findings:null, invariants:null };
+const $ = (s, el=document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pill = (v, extra="") => `<span class="pill ${esc(v)} ${extra}">${esc(String(v).replaceAll("_"," "))}</span>`;
+const strengthLabel = s => ({DENY:"DENY",NO_PATH:"unsatisfiable ALLOW",ONE_FA_KNOWLEDGE:"1FA password only",ONE_FA_POSSESSION:"1FA possession",ONE_FA_PHISHING_RESISTANT:"1FA phishing-resistant",TWO_FA:"2FA any",TWO_FA_PHISHING_RESISTANT:"2FA phishing-resistant",TWO_FA_PHISHING_RESISTANT_HARDWARE:"2FA PR + hardware"})[s] || s;
+const strengthClass = s => s==="DENY"?"DENY":(s==="ONE_FA_KNOWLEDGE"||s==="NO_PATH")?"HIGH":s?.startsWith("ONE_FA")?"MEDIUM":"PROVED";
+
+let toastTimer;
+function toast(msg, ms=3200){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.hidden=true, ms); }
+
+async function api(path, opts={}) {
+  if (STATIC) throw new Error("This is a read-only export. Run `okta-policy-analyzer serve SNAPSHOT` for checking and proposing.");
+  const r = await fetch(path, { headers:{"Content-Type":"application/json"}, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const j = await r.json().catch(()=>({error:`HTTP ${r.status}`}));
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+async function load() {
+  if (STATIC) { Object.assign(D, window.__DATA__); }
+  else {
+    const [state, policies, principals, findings, invariants] = await Promise.all(["state","policies","principals","findings","invariants"].map(k=>api("/api/"+k)));
+    Object.assign(D, {state, policies, principals, findings, invariants});
+  }
+  $("#brand-org").textContent = D.state.org_url || "snapshot";
+  $("#foot-snapshot").textContent = `snapshot ${D.state.fetched_at?.slice(0,16).replace("T"," ") || ""}`;
+  $("#foot-mode").textContent = STATIC ? "read-only export" : (D.state.allow_apply ? "writes enabled (--allow-apply)" : "read-only server");
+  if (STATIC) $("#export-link").hidden = true;
+  renderNav(); route();
+}
+
+// ---------------------------------------------------------------- routing
+const PAGES = [
+  ["overview","Overview", () => null],
+  ["invariants","Invariants", () => D.invariants?.length],
+  ["policies","Policies", () => D.policies?.access?.length],
+  ["principals","Principals", () => D.principals?.groups?.length],
+  ["violations","Violations", () => (D.findings||[]).filter(f=>f.severity==="HIGH").length + (D.invariants||[]).filter(i=>i.verdict==="VIOLATED").length],
+];
+let current = (()=>{ try { return location.hash.slice(1) || localStorage.getItem("opa.page") || "overview"; } catch { return "overview"; } })();
+function renderNav(){
+  $("#nav").innerHTML = PAGES.map(([id,label,count]) => {
+    const c = count(); return `<button data-page="${id}" ${current.startsWith(id)?'aria-current="page"':''}>${label}${c!=null?`<span class="count">${c}</span>`:""}</button>`;
+  }).join("");
+  $("#nav").onclick = e => { const b=e.target.closest("button"); if(!b) return; go(b.dataset.page); };
+}
+function go(page){ current=page; try{ localStorage.setItem("opa.page", page.split("/")[0]); }catch{} location.hash = page; renderNav(); route(); }
+window.addEventListener("hashchange", ()=>{ const h=location.hash.slice(1); if(h && h!==current){ current=h; renderNav(); route(); } });
+function route(){
+  const [page, arg] = current.split("/");
+  const m = $("#main"); m.scrollTop = 0;
+  ({overview:renderOverview, invariants:renderInvariants, policies:renderPolicies, principals:renderPrincipals, violations:renderViolations}[page] || renderOverview)(m, decodeURIComponent(arg||""));
+}
+
+// ---------------------------------------------------------------- overview
+function renderOverview(m){
+  const s = D.state, inv = D.invariants||[], f = D.findings||[];
+  const weakest = (D.policies.access||[]).filter(p=>p.weakest && p.weakest!=="DENY").sort((a,b)=>rank(a.weakest)-rank(b.weakest))[0];
+  m.innerHTML = `
+    <h1>${esc(s.org_url||"Snapshot")}</h1>
+    <p class="lede">Every statement on these pages is proved by the solver over all users and contexts of the snapshot taken ${esc(s.fetched_at||"")}${STATIC?" (read-only export)":""}.</p>
+    ${STATIC?`<div class="banner">Read-only export: checking, proposing and applying need the live server (<code>okta-policy-analyzer serve</code>).</div>`:""}
+    <div class="grid">
+      ${tile(inv.filter(i=>i.verdict==="PROVED").length,"invariants proved","PROVED")}
+      ${tile(inv.filter(i=>i.verdict==="VIOLATED").length,"invariants violated","VIOLATED")}
+      ${tile(f.filter(x=>x.severity==="HIGH").length,"high findings","HIGH")}
+      ${tile(D.policies.access.length,"authentication policies")}
+      ${tile(D.principals.groups.filter(g=>g.type!=="MISSING").length,"groups")}
+      ${tile(D.principals.apps.length,"apps")}
+    </div>
+    ${weakest?`<h2>Weakest way in</h2><div class="card stripe ${strengthClass(weakest.weakest)}"><div class="row">${pill(weakest.weakest_label||weakest.weakest)}<b>${esc(weakest.name)}</b><span class="muted">→ ${esc(weakest.apps.join(", "))}</span></div>${weakest.weakest_witness?`<div class="mono muted" style="margin-top:6px">${esc(weakest.weakest_witness)}</div>`:""}</div>`:""}
+    <h2>Per-app weakest authentication</h2>
+    <div class="tablewrap"><table><thead><tr><th>App</th><th>Policy</th><th>Weakest accepted</th><th>With session policy</th></tr></thead><tbody>
+      ${D.policies.access.flatMap(p=>p.apps.map(a=>`<tr class="clickable" data-go="policies/${encodeURIComponent(p.name)}"><td>${esc(a)}</td><td>${esc(p.name)}</td><td>${pill(strengthLabel(p.weakest),strengthClass(p.weakest))}</td><td class="muted">${esc(p.combined_weakest?strengthLabel(p.combined_weakest):"—")}</td></tr>`)).join("")}
+      ${D.policies.apps_without_policy.map(a=>`<tr><td>${esc(a)}</td><td class="muted" colspan="3">no authentication policy attached</td></tr>`).join("")}
+    </tbody></table></div>
+    <h2>Modelling assumptions every proof relies on</h2>
+    <ul class="small muted">${(s.assumptions||[]).map(a=>`<li>${esc(a)}</li>`).join("")}</ul>
+    ${(s.warnings||[]).length?`<h2>Snapshot warnings</h2><ul class="small muted">${s.warnings.map(w=>`<li>${esc(w)}</li>`).join("")}</ul>`:""}`;
+  m.onclick = e => { const r=e.target.closest("[data-go]"); if(r) go(r.dataset.go); };
+}
+const RANK = ["DENY","NO_PATH","ONE_FA_KNOWLEDGE","ONE_FA_POSSESSION","ONE_FA_PHISHING_RESISTANT","TWO_FA","TWO_FA_PHISHING_RESISTANT","TWO_FA_PHISHING_RESISTANT_HARDWARE"];
+const rank = s => RANK.indexOf(s);
+const tile = (n,l,cls="") => `<div class="tile"><div class="n" style="${cls==='VIOLATED'||cls==='HIGH'?(n?'color:var(--bad)':''):cls==='PROVED'?'color:var(--ok)':''}">${n}</div><div class="l">${esc(l)}</div></div>`;
+
+// ---------------------------------------------------------------- invariants
+const PHRASES = [
+  "Nobody can access any app with only a password",
+  "Okta Administrators must use phishing-resistant MFA for the Okta Admin Console",
+  "Contractors can only reach Salesforce from the Corporate Network or VPN",
+  "Only Finance can access Payroll (Workday)",
+  "Users outside the VPN on an unmanaged device must be denied access to Payroll (Workday)",
+  "Executives must use hardware-protected MFA for Payroll (Workday) from the internet",
+  "High-risk sign-ins to Salesforce must be denied",
+  "Nobody can sign in to Legacy Intranet without a password",
+];
+let draft = (()=>{ try { return localStorage.getItem("opa.draft") || ""; } catch { return ""; } })();
+let pending = null;   // unsaved check result
+const plans = {};     // sentence -> plan
+
+function renderInvariants(m){
+  const inv = D.invariants||[];
+  const groups = D.principals.groups.filter(g=>!g.everyone && g.type!=="MISSING").map(g=>g.name);
+  const apps = D.policies.access.flatMap(p=>p.apps);
+  const zones = D.principals.zones.filter(z=>z.usage==="POLICY").map(z=>z.name);
+  m.innerHTML = `
+    <h1>Invariants</h1>
+    <p class="lede">Write what must always be true, in plain English. The workbench restates it formally (the <em>reading</em>), proves it over every user and context, or shows the case that breaks it.</p>
+    ${STATIC?`<div class="banner">Read-only export: authoring needs the live server.</div>`:""}
+    <div class="card stack">
+      <label for="inv-input" class="small muted">New invariant</label>
+      <textarea id="inv-input" placeholder="e.g. Contractors can only reach Salesforce from the Corporate Network or VPN" ${STATIC?"disabled":""}>${esc(draft)}</textarea>
+      <div class="row">
+        <button class="btn primary" id="inv-check" ${STATIC?"disabled":""}>Check</button>
+        <button class="btn" id="inv-save" ${STATIC||!D.state.invariants_file?"disabled":""} title="${D.state.invariants_file?`Append to ${esc(D.state.invariants_file)}`:"Start the server with --invariants FILE to save"}">Check and save</button>
+        <span class="muted small" id="inv-status"></span>
+      </div>
+      <details><summary class="small muted">Phrasebook and names in this snapshot</summary>
+        <div class="stack" style="margin-top:8px">
+          <div><div class="small muted">Examples (click to use)</div><div class="chips">${PHRASES.map(p=>`<span class="chip" data-ins="${esc(p)}">${esc(p)}</span>`).join("")}</div></div>
+          <div><div class="small muted">Groups</div><div class="chips">${groups.map(g=>`<span class="chip" data-ins="${esc(g)}">${esc(g)}</span>`).join("")}</div></div>
+          <div><div class="small muted">Apps</div><div class="chips">${apps.map(a=>`<span class="chip" data-ins="${esc(a)}">${esc(a)}</span>`).join("")}<span class="chip" data-ins="any app">any app</span></div></div>
+          <div><div class="small muted">Zones</div><div class="chips">${zones.map(z=>`<span class="chip" data-ins="${esc(z)}">${esc(z)}</span>`).join("")}<span class="chip" data-ins="from the internet">from the internet</span></div></div>
+          <div><div class="small muted">Requirements</div><div class="chips">${["must be denied","cannot access","must be able to access","must use MFA","must use phishing-resistant MFA","must use hardware-protected MFA","with only a password","without a password","on an unmanaged device","on a managed device","at high risk","unless they are on","even after the global session policy"].map(r=>`<span class="chip" data-ins="${esc(r)}">${esc(r)}</span>`).join("")}</div></div>
+        </div>
+      </details>
+    </div>
+    <div id="inv-pending"></div>
+    <h2>Saved invariants <span class="muted small">${D.state.invariants_file?esc(D.state.invariants_file):"(no file; start with --invariants FILE)"}</span></h2>
+    <div class="filter"><input type="text" id="inv-filter" placeholder="filter…"><label class="small"><input type="checkbox" id="inv-only-bad"> violated only</label></div>
+    <div class="stack" id="inv-list"></div>`;
+  const ta = $("#inv-input");
+  ta.oninput = () => { draft = ta.value; try{ localStorage.setItem("opa.draft", draft); }catch{} };
+  m.querySelectorAll("[data-ins]").forEach(c => c.onclick = () => { const v=c.dataset.ins; ta.value = ta.value && !PHRASES.includes(v) ? (ta.value.replace(/\s+$/,"")+" "+v) : v; ta.dispatchEvent(new Event("input")); ta.focus(); });
+  $("#inv-check").onclick = () => runCheck(false);
+  $("#inv-save").onclick = () => runCheck(true);
+  $("#inv-filter").oninput = $("#inv-only-bad").onchange = renderInvList;
+  renderPending(); renderInvList();
+}
+async function runCheck(save){
+  const s = $("#inv-input").value.trim(); if(!s) return;
+  $("#inv-status").textContent = "proving…";
+  try {
+    const r = await api(save?"/api/invariants":"/api/invariants/check", {method:"POST", body:{sentence:s}});
+    if (save) { D.invariants = D.invariants.filter(i=>i.sentence!==r.sentence).concat([r]); pending=null; renderNav(); renderInvList(); toast(`Saved · ${r.verdict}`); }
+    else { pending = r; }
+    $("#inv-status").textContent = ""; renderPending();
+  } catch(e){ $("#inv-status").textContent = e.message; }
+}
+function renderPending(){ const el=$("#inv-pending"); if(!el) return; el.innerHTML = pending ? `<h2>Result</h2>${invCard(pending, {unsaved:true})}` : ""; bindInvCards(el); }
+function renderInvList(){
+  const q = ($("#inv-filter")?.value||"").toLowerCase(), onlyBad = $("#inv-only-bad")?.checked;
+  const list = (D.invariants||[]).filter(i => (!q || i.sentence.toLowerCase().includes(q)) && (!onlyBad || i.verdict==="VIOLATED"));
+  const el = $("#inv-list");
+  el.innerHTML = list.length ? list.map(i=>invCard(i,{})).join("") : `<p class="muted">No saved invariants${q?" match":""}. ${STATIC?"":"Write one above and press <b>Check and save</b>."}</p>`;
+  bindInvCards(el);
+}
+function invCard(i, {unsaved}){
+  const bad = (i.results||[]).filter(r=>!r.holds && !r.vacuous && !r.error);
+  const key = encodeURIComponent(i.sentence);
+  return `<details class="card stripe inv ${esc(i.verdict)}" ${unsaved||i.verdict==="VIOLATED"?"open":""} data-sentence="${esc(i.sentence)}">
+    <summary>${pill(i.verdict)}<span class="sentence">${esc(i.sentence)}</span>
+      ${unsaved && !STATIC && D.state.invariants_file ? `<button class="btn" data-act="save">Save</button>` : ""}
+      ${!unsaved && !STATIC ? `<button class="btn" data-act="remove" title="Remove from the invariants file">Remove</button>` : ""}
+    </summary>
+    ${i.reading?`<div class="reading"><b>Reading.</b> ${esc(i.reading)}</div>`:""}
+    ${(i.notes||[]).map(n=>`<div class="small muted">note: ${esc(n)}</div>`).join("")}
+    ${(i.problems||[]).map(p=>`<div class="small" style="color:var(--bad)">cannot read: ${esc(p)}</div>`).join("")}
+    ${(i.results||[]).map(r => r.error ? `<div class="small" style="color:var(--bad)">${esc(r.policy)}: ${esc(r.error)}</div>`
+      : r.vacuous ? `<div class="small muted">${esc(r.policy)}: vacuous, the premise matches no user or context</div>`
+      : r.holds ? `<div class="small" style="color:var(--ok)">${esc(r.policy)}: holds for every user and context</div>`
+      : `<div class="cx"><div><b>${esc(r.policy)}</b>: violated by rule <a href="#policies/${encodeURIComponent(r.policy)}/${encodeURIComponent(r.violating_rule||"")}">${esc(r.violating_rule)}</a> → <span class="mono">${esc(r.violating_outcome)}</span></div>
+          ${r.counterexample?`<div class="who" style="margin-top:4px">${esc(r.counterexample)}</div>`:""}
+          ${(r.who||[]).length?`<div class="small muted" style="margin-top:4px">who (in some context): ${r.who.slice(0,4).map(w=>`<span class="mono">${esc(w)}</span>`).join(" · ")}</div>`:""}
+        </div>`).join("")}
+    ${i.verdict==="PROVED" && (i.assumptions||[]).length ? `<details style="margin-top:6px"><summary class="small muted">proof relies on ${i.assumptions.length} modelling assumptions</summary><ul class="small muted">${i.assumptions.map(a=>`<li>${esc(a)}</li>`).join("")}</ul></details>`:""}
+    ${i.assertion?`<details style="margin-top:6px"><summary class="small muted">formal assertion (YAML for verify)</summary><pre class="json">${esc(toYaml(i.assertion))}</pre></details>`:""}
+    ${bad.length && !STATIC ? `<div class="row" style="margin-top:8px"><button class="btn primary" data-act="propose">Propose a rule that makes this hold</button><input type="text" data-role="rulename" placeholder="rule name (optional)" style="max-width:280px"></div>`:""}
+    <div data-role="plan">${plans[i.sentence]?planView(plans[i.sentence]):""}</div>
+  </details>`;
+}
+function bindInvCards(root){
+  root.querySelectorAll("[data-act]").forEach(b => b.onclick = async e => {
+    e.preventDefault(); e.stopPropagation();
+    const card = b.closest("[data-sentence]"), s = card.dataset.sentence, act = b.dataset.act;
+    try {
+      if (act==="save") { const r = await api("/api/invariants",{method:"POST",body:{sentence:s}}); D.invariants = D.invariants.filter(i=>i.sentence!==s).concat([r]); pending=null; renderNav(); renderPending(); renderInvList(); toast("Saved"); }
+      if (act==="remove") { await api("/api/invariants",{method:"DELETE",body:{sentence:s}}); D.invariants = D.invariants.filter(i=>i.sentence!==s); renderNav(); renderInvList(); toast("Removed"); }
+      if (act==="propose") { b.disabled=true; b.textContent="proving the fix…"; const name = card.querySelector("[data-role=rulename]")?.value||null; const plan = await api("/api/propose",{method:"POST",body:{sentence:s, rule_name:name}}); plans[s]=plan; const slot=card.querySelector("[data-role=plan]"); slot.innerHTML = planView(plan); bindPlan(slot, plan); b.disabled=false; b.textContent="Propose again"; }
+    } catch(err){ toast(err.message, 6000); b.disabled=false; }
+  });
+  root.querySelectorAll("[data-role=plan]").forEach(slot => { const s=slot.closest("[data-sentence]").dataset.sentence; if(plans[s]) bindPlan(slot, plans[s]); });
+}
+function planView(p){
+  const ops = p.ops||[];
+  return `<div class="card" style="margin-top:10px;background:var(--surface-2)">
+    <div class="row">${pill(p.status)}<b>Proposed change</b>${p.after?`<span class="small muted">after the change the invariant is ${pill(p.after)}</span>`:""}</div>
+    ${(p.problems||[]).map(x=>`<div class="small" style="color:var(--bad);margin-top:6px">${esc(x)}</div>`).join("")}
+    ${ops.map(o=>`<div class="rulecard" style="margin-top:8px">
+      <div class="row">${pill(o.op==="create"?"CREATE":"UPDATE")}<b>${esc(o.rule.name)}</b><span class="muted small">in ${esc(o.policy_name)}${o.rule_id?` (rule ${esc(o.rule_id)})`:""}</span></div>
+      ${o.rationale?`<div class="small muted" style="margin-top:4px">${esc(o.rationale)}</div>`:""}
+      <details style="margin-top:6px"><summary class="small muted">rule body as it will be sent</summary><pre class="json">${esc(JSON.stringify(apiBody(o.rule),null,2))}</pre></details>
+    </div>`).join("")}
+    ${(p.diff||[]).length?`<h3>Impact (formal diff)</h3>${p.diff.map(d=>`<div class="small"><b>${esc(d.app)}</b> ${pill(d.verdict)} <span class="muted">weakest ${esc(strengthLabel(d.old_weakest))} → ${esc(strengthLabel(d.new_weakest))}</span>
+        <div class="impact" style="margin:4px 0 8px 8px">${(d.lost_access||[]).map(w=>`<div class="lost">lost access: <span class="mono">${esc(w)}</span></div>`).join("")}${(d.stronger||[]).map(w=>`<div class="stronger">stronger auth: <span class="mono">${esc(w)}</span></div>`).join("")}${(d.new_access||[]).map(w=>`<div class="gain"><b>new access</b>: <span class="mono">${esc(w)}</span></div>`).join("")}${(d.weaker||[]).map(w=>`<div class="weaker"><b>weaker auth</b>: <span class="mono">${esc(w)}</span></div>`).join("")}</div></div>`).join("")}`:""}
+    ${(p.new_findings||[]).length?`<h3>Findings introduced by the change</h3>${p.new_findings.map(f=>`<div class="small">${pill(f.severity)} ${esc(f.title)}</div>`).join("")}`:""}
+    ${(p.caveats||[]).length?`<h3>Caveats</h3><ul class="small muted">${p.caveats.map(c=>`<li>${esc(c)}</li>`).join("")}</ul>`:""}
+    ${ops.length?`<div class="row" style="margin-top:10px">
+      ${D.state.allow_apply && D.state.credentials && p.status==="FIX_PROVED" ? `<button class="btn danger" data-plan-act="apply">Apply to ${esc(D.state.org_url)}…</button><label class="small"><input type="checkbox" data-role="inactive"> create as inactive (staged rollout)</label>`
+        : `<span class="small muted">${p.status!=="FIX_PROVED"?"Only FIX_PROVED plans can be applied.":D.state.allow_apply?"No credentials in the server environment (OKTA_API_TOKEN).":"Applying is disabled on this server; download the plan and use <code>okta-policy-analyzer apply plan.json --dry-run</code>, or restart with <code>--allow-apply</code>."}</span>`}
+      <button class="btn" data-plan-act="download">Download plan JSON</button>
+    </div>`:""}
+    <div data-role="applied"></div>
+  </div>`;
+}
+function apiBody(rule){ const b={}; for(const k of ["name","priority","status","type","conditions","actions"]) if(rule[k]!==undefined && rule[k]!==null) b[k]=rule[k]; b.type=b.type||"ACCESS_POLICY"; return b; }
+function bindPlan(slot, plan){
+  slot.querySelectorAll("[data-plan-act]").forEach(b => b.onclick = async e => {
+    e.preventDefault(); e.stopPropagation();
+    if (b.dataset.planAct==="download") { const blob=new Blob([JSON.stringify(plan,null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="plan.json"; a.click(); return; }
+    const inactive = slot.querySelector("[data-role=inactive]")?.checked;
+    confirmModal({ title:`Apply ${plan.ops.length} change${plan.ops.length>1?"s":""} to ${D.state.org_url}?`,
+      body:`<p>This writes to the Okta org. ${inactive?"Rules are created/updated as INACTIVE.":"Rules become active immediately."} A rollback record is written next to the snapshot.</p><ul class="small">${plan.ops.map(o=>`<li>${o.op.toUpperCase()} <b>${esc(o.rule.name)}</b> in ${esc(o.policy_name)}</li>`).join("")}</ul><p class="small">Type <b>APPLY</b> to confirm.</p>`,
+      onConfirm: async () => {
+        b.disabled=true; b.textContent="applying…";
+        try { const rec = await api("/api/apply",{method:"POST",body:{plan, inactive:!!inactive, confirm:"APPLY"}});
+          slot.querySelector("[data-role=applied]").innerHTML = `<div class="card" style="margin-top:8px;border-color:var(--ok)"><b>Applied.</b> ${rec.applied.map(a=>`${a.op}d rule <span class="mono">${esc(a.rule_id)}</span>`).join(", ")}. Rollback record: <span class="mono">${esc(rec.record_file)}</span>. Take a fresh snapshot (<b>Refresh snapshot</b> on Overview) and re-check.</div>`;
+          toast("Applied to the org"); b.textContent="Applied";
+        } catch(err){ toast(err.message, 8000); b.disabled=false; b.textContent="Apply…"; }
+      }});
+  });
+}
+function confirmModal({title, body, onConfirm}){
+  const m=$("#modal"); m.hidden=false;
+  m.innerHTML=`<div class="modal"><div class="box"><h2 style="margin-top:0">${esc(title)}</h2>${body}<input type="text" id="confirm-input" placeholder="APPLY" autocomplete="off"><div class="row" style="margin-top:12px;justify-content:flex-end"><button class="btn" id="confirm-cancel">Cancel</button><button class="btn danger" id="confirm-ok" disabled>Apply</button></div></div></div>`;
+  const inp=$("#confirm-input"), ok=$("#confirm-ok"); inp.oninput=()=>ok.disabled=inp.value.trim()!=="APPLY"; inp.focus();
+  $("#confirm-cancel").onclick=()=>{ m.hidden=true; m.innerHTML=""; };
+  ok.onclick=()=>{ m.hidden=true; m.innerHTML=""; onConfirm(); };
+}
+function toYaml(a){
+  const lines=[`- name: ${a.name}`]; if(a.description) lines.push(`  description: ${JSON.stringify(a.description)}`);
+  if(a.all_apps) lines.push("  all_apps: true"); if(a.apps) lines.push(`  apps: [${a.apps.map(x=>JSON.stringify(x)).join(", ")}]`); if(a.policy) lines.push(`  policy: ${JSON.stringify(a.policy)}`);
+  const obj=(k,o)=>{ lines.push(`  ${k}:`); if(!o||!Object.keys(o).length){ lines[lines.length-1]+=" {}"; return; } for(const [kk,v] of Object.entries(o)) lines.push(`    ${kk}: ${Array.isArray(v)?`[${v.map(x=>JSON.stringify(x)).join(", ")}]`:typeof v==="object"?JSON.stringify(v):JSON.stringify(v)}`); };
+  obj("when",a.when); obj("expect",a.expect); if(a.with_session_policy) lines.push("  with_session_policy: true");
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------- policies
+function renderPolicies(m, arg){
+  const [polName, ruleName] = (arg||"").split("/").map(x=>{ try{return decodeURIComponent(x);}catch{return x;} });
+  const access = D.policies.access;
+  const sel = access.find(p=>p.name===polName) || access[0];
+  m.innerHTML = `<h1>Policies</h1><p class="lede">Authentication policies in evaluation order. Each rule shows the weakest authentication it accepts, who can reach it, and whether an earlier rule shadows it.</p>
+    <div class="split"><div>
+      <div class="tablewrap"><table><thead><tr><th>Policy</th><th>Apps</th><th>Weakest</th><th></th></tr></thead><tbody>
+        ${access.map(p=>`<tr class="clickable ${p===sel?"selected":""}" data-pol="${esc(p.name)}"><td>${esc(p.name)}${p.status!=="ACTIVE"?" "+pill(p.status):""}</td><td class="small muted">${esc(p.apps.join(", "))||"—"}</td><td>${pill(strengthLabel(p.weakest),strengthClass(p.weakest))}</td><td>${p.findings.filter(f=>f.severity==="HIGH").length?pill(p.findings.filter(f=>f.severity==="HIGH").length+" HIGH","HIGH"):""}</td></tr>`).join("")}
+      </tbody></table></div>
+      <h2>Global session policies</h2>
+      ${D.policies.session.map(p=>`<details class="card"><summary><b>${esc(p.name)}</b><span class="muted small">groups: ${esc((p.groups||[]).join(", ")||"everyone")}</span>${p.decides?"":pill("never decides","MEDIUM")}</summary>
+        ${p.rules.map(r=>`<div class="small" style="margin-top:6px"><b>${esc(r.name)}</b> <span class="muted">${esc(r.summary)}</span>${r.reachable?"":" "+pill("unreachable","MEDIUM")}</div>`).join("")}
+        ${(p.fall_through_who||[]).length?`<div class="small muted" style="margin-top:6px">falls through for: ${p.fall_through_who.map(w=>`<span class="mono">${esc(w)}</span>`).join(" · ")}</div>`:""}</details>`).join("")}
+      <h2>Enrollment policies</h2>
+      ${D.policies.enrollment.map(p=>`<details class="card"><summary><b>${esc(p.name)}</b><span class="muted small">groups: ${esc((p.groups||[]).join(", ")||"everyone")}</span></summary>${p.rules.map(r=>`<div class="small" style="margin-top:6px"><b>${esc(r.name)}</b> <span class="muted">${esc(r.summary)}</span></div>`).join("")}</details>`).join("")}
+    </div><div id="pol-detail"></div></div>`;
+  m.querySelectorAll("[data-pol]").forEach(r=>r.onclick=()=>go(`policies/${encodeURIComponent(r.dataset.pol)}`));
+  if (sel) renderPolicyDetail($("#pol-detail"), sel, ruleName);
+}
+function renderPolicyDetail(el, p, ruleName){
+  el.innerHTML = `<div class="card stack">
+    <div><h2 style="margin:0">${esc(p.name)}</h2><div class="small muted">${esc(p.apps.join(", "))||"no apps"} · ${p.rules.length} rules · weakest ${esc(strengthLabel(p.weakest))}${p.combined_weakest?` · with session policy ${esc(strengthLabel(p.combined_weakest))}`:""}</div></div>
+    ${p.findings.length?`<div class="stack">${p.findings.map(f=>`<div class="small stripe ${esc(f.severity)}" style="padding-left:8px">${pill(f.severity)} ${esc(f.title)}${f.rule?` <a href="#policies/${encodeURIComponent(p.name)}/${encodeURIComponent(f.rule)}">${esc(f.rule)}</a>`:""}</div>`).join("")}</div>`:""}
+    <h3 style="margin:4px 0 0">Rules in evaluation order</h3>
+    <div class="stack">${p.rules.map(r=>ruleCard(p,r,r.name===ruleName)).join("")}</div>
+    <h3 style="margin:4px 0 0">Who can obtain each outcome</h3>
+    <div class="tablewrap"><table><thead><tr><th>Outcome</th><th>Rules</th><th>Who (in some context)</th></tr></thead><tbody>
+      ${p.outcomes.map(o=>`<tr><td>${pill(strengthLabel(o.strength),strengthClass(o.strength))}</td><td class="small">${esc(o.rules.join(", "))}</td><td class="small mono">${o.who.map(esc).join("<br>")}${o.complete?"":"<span class='muted'> …</span>"}</td></tr>`).join("")}
+    </tbody></table></div>
+  </div>`;
+  const target = el.querySelector(".rulecard[data-selected]"); if(target){ target.scrollIntoView({block:"center"}); target.querySelector("details").open=true; }
+}
+function ruleCard(p, r, selected){
+  const dead = r.reachable===false || r.status!=="ACTIVE";
+  return `<div class="rulecard ${dead?"dead":""}" ${selected?"data-selected":""} style="${selected?"border-color:var(--accent)":""}">
+    <div class="row"><span class="mono muted">${r.system?"catch-all":"#"+r.priority}</span><b>${esc(r.name)}</b>${pill(r.access==="DENY"?"DENY":strengthLabel(r.strength), r.access==="DENY"?"DENY":strengthClass(r.strength))}${r.status!=="ACTIVE"?pill(r.status):""}${r.reachable===false?pill("shadowed","MEDIUM"):""}${r.redundant?pill("redundant","LOW"):""}</div>
+    <div class="cond">${r.conditions.length?r.conditions.map(c=>`<span>${esc(c)}</span>`).join(""):`<span class="muted">everyone, every context</span>`}</div>
+    <details style="margin-top:6px"><summary class="small muted">details</summary>
+      <div class="kv" style="margin-top:6px">
+        ${(r.paths||[]).length?`<span class="k">accepted paths</span><span class="small">${r.paths.map(esc).join("<br>")}</span>`:""}
+        ${(r.who||[]).length?`<span class="k">who reaches it</span><span class="small mono">${r.who.map(esc).join("<br>")}</span>`:""}
+        ${(r.when||[]).length?`<span class="k">in which context</span><span class="small mono">${r.when.map(esc).join("<br>")}</span>`:""}
+        ${(r.shadowed_by||[]).length?`<span class="k">shadowed by</span><span class="small">${esc(r.shadowed_by.join(", "))}</span>`:""}
+        ${(r.enrollment_gap_who||[]).length?`<span class="k">cannot enroll</span><span class="small mono" style="color:var(--bad)">${r.enrollment_gap_who.map(esc).join("<br>")}</span>`:""}
+      </div>
+      <details style="margin-top:6px"><summary class="small muted">Okta JSON</summary><pre class="json">${esc(JSON.stringify({conditions:r.raw?.conditions, actions:r.raw?.actions},null,2))}</pre></details>
+    </details>
+  </div>`;
+}
+
+// ---------------------------------------------------------------- principals
+function renderPrincipals(m, arg){
+  const P = D.principals; const tab = arg || "groups";
+  const tabs = [["groups","Groups",P.groups.length],["users","Users",P.users.length],["zones","Network zones",P.zones.length],["devices","Device assurance",P.device_assurances.length],["types","User types",P.user_types.length],["apps","Apps",P.apps.length],["auth","Authenticators",P.authenticators.length]];
+  m.innerHTML = `<h1>Principals</h1><p class="lede">Everything a rule can name. For each, which rules reference it and, for groups, the weakest and strongest authentication a member can obtain per policy.</p>
+    <div class="row" style="margin-bottom:12px">${tabs.map(([id,l,n])=>`<button class="btn ${id===tab?"primary":""}" data-tab="${id}">${l} <span class="mono">${n}</span></button>`).join("")}</div>
+    <div class="filter"><input type="text" id="pr-filter" placeholder="filter…"></div><div id="pr-body"></div>`;
+  m.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>go(`principals/${b.dataset.tab}`));
+  const body = $("#pr-body"), filt = $("#pr-filter");
+  const refs = r => (r||[]).length ? r.map(x=>`<div class="small"><a href="#policies/${encodeURIComponent(x.policy)}/${encodeURIComponent(x.rule)}">${esc(x.rule)}</a> <span class="muted">${esc(x.policy)} · ${esc(x.how)}</span></div>`).join("") : `<span class="muted small">not referenced</span>`;
+  const draw = () => {
+    const q = filt.value.toLowerCase(); const f = xs => xs.filter(x=>!q || JSON.stringify(x).toLowerCase().includes(q));
+    if (tab==="groups") body.innerHTML = tbl(["Group","Type","Users","Referenced by","Weakest / strongest per policy"], f(P.groups).map(g=>[`<b>${esc(g.name)}</b>${g.managed_by_rules.length?`<div class="small muted">managed by rule: ${esc(g.managed_by_rules.join(", "))}</div>`:""}${g.description?`<div class="small muted">${esc(g.description)}</div>`:""}`, g.type==="MISSING"?pill("MISSING","HIGH"):esc(g.type), g.users_count??"", refs(g.referenced_by), (g.view||[]).map(v=>`<div class="small">${esc(v.policy)}: ${pill(strengthLabel(v.weakest),strengthClass(v.weakest))}${v.weakest!==v.strongest?` … ${pill(strengthLabel(v.strongest),strengthClass(v.strongest))}`:""} <span class="muted">via ${esc(v.rule)}</span></div>`).join("")||`<span class="muted small">—</span>`]));
+    else if (tab==="users") body.innerHTML = P.users.length||P.user_refs_unknown.length ? tbl(["Login","Status","User type","Groups","Referenced by"], f(P.users).map(u=>[esc(u.login), pill(u.status), esc(u.user_type||""), `<span class="small">${esc(u.groups.join(", "))}</span>`, refs(u.referenced_by)]).concat(f(P.user_refs_unknown).map(u=>[`<span class="mono">${esc(u.id)}</span> <span class="muted small">(not in snapshot)</span>`,"","","",refs(u.referenced_by)]))) : `<p class="muted">No users in this snapshot (fetch with <code>--with-users</code>); rules that name individual users are listed on the Policies page.</p>`;
+    else if (tab==="zones") body.innerHTML = tbl(["Zone","Type","Usage","Definition","Referenced by"], f(P.zones).map(z=>[`<b>${esc(z.name)}</b>${z.system?' <span class="muted small">system</span>':""}`, esc(z.type), z.usage==="BLOCKLIST"?pill("BLOCKLIST","HIGH"):esc(z.usage), `<span class="small mono">${esc(z.summary)}</span>`, refs(z.referenced_by)]));
+    else if (tab==="devices") body.innerHTML = tbl(["Device assurance policy","Platform","Referenced by"], f(P.device_assurances).map(d=>[`<b>${esc(d.name)}</b>`, esc(d.platform), refs(d.referenced_by)]));
+    else if (tab==="types") body.innerHTML = tbl(["User type","Display name","Default"], f(P.user_types).map(t=>[`<b>${esc(t.name)}</b>`, esc(t.display_name), t.default?"yes":""]));
+    else if (tab==="apps") body.innerHTML = tbl(["App","Sign-on mode","Status","Authentication policy"], f(P.apps).map(a=>[`<b>${esc(a.label)}</b>`, esc(a.sign_on_mode), pill(a.status), a.policy?`<a href="#policies/${encodeURIComponent(a.policy)}">${esc(a.policy)}</a>`:pill("none","MEDIUM")]));
+    else if (tab==="auth") body.innerHTML = tbl(["Authenticator","Key","Status","Methods"], f(P.authenticators).map(a=>[`<b>${esc(a.name)}</b>`, `<span class="mono">${esc(a.key)}</span>`, pill(a.status), a.methods.map(mm=>`<span class="small">${esc(mm.type)} ${mm.status!=="ACTIVE"?pill(mm.status):""}</span>`).join(", ")]));
+  };
+  filt.oninput = draw; draw();
+}
+const tbl = (heads, rows) => `<div class="tablewrap"><table><thead><tr>${heads.map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.length?rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>`).join(""):`<tr><td colspan="${heads.length}" class="muted">nothing matches</td></tr>`}</tbody></table></div>`;
+
+// ---------------------------------------------------------------- violations
+function renderViolations(m){
+  const inv = (D.invariants||[]).filter(i=>i.verdict==="VIOLATED");
+  const f = D.findings||[]; const order = {HIGH:0,MEDIUM:1,LOW:2,INFO:3};
+  m.innerHTML = `<h1>Violations</h1><p class="lede">The concrete cases where the org's policies contradict an invariant or their own intent. Each is a proved witness: a population and a context that the solver found, not a guess.</p>
+    <h2>Invariant counterexamples <span class="muted small">${inv.length}</span></h2>
+    <div class="stack">${inv.length?inv.map(i=>invCard(i,{})).join(""):`<p class="muted">No saved invariant is violated.</p>`}</div>
+    <h2>Policy findings <span class="muted small">${f.length}</span></h2>
+    <div class="filter">${["HIGH","MEDIUM","LOW","INFO"].map(s=>`<label class="small"><input type="checkbox" data-sev="${s}" ${s==="HIGH"||s==="MEDIUM"?"checked":""}> ${s}</label>`).join("")}</div>
+    <div class="stack" id="find-list"></div>`;
+  const draw = () => {
+    const on = new Set([...m.querySelectorAll("[data-sev]:checked")].map(c=>c.dataset.sev));
+    $("#find-list").innerHTML = f.filter(x=>on.has(x.severity)).sort((a,b)=>order[a.severity]-order[b.severity]).map(x=>`<details class="card stripe ${esc(x.severity)}"><summary>${pill(x.severity)}<span class="pill">${esc(x.kind)}</span><span style="flex:1;min-width:200px">${esc(x.title)}</span></summary>
+      <div class="small" style="margin-top:8px">${esc(x.detail)}</div>
+      <div class="kv" style="margin-top:8px">
+        ${x.policy?`<span class="k">policy</span><span><a href="#policies/${encodeURIComponent(x.policy)}${x.rule?"/"+encodeURIComponent(x.rule):""}">${esc(x.policy)}${x.rule?` › ${esc(x.rule)}`:""}</a></span>`:""}
+        ${(x.apps||[]).length?`<span class="k">apps</span><span>${esc(x.apps.join(", "))}</span>`:""}
+        ${(x.who||[]).length?`<span class="k">who</span><span class="mono small">${x.who.map(esc).join("<br>")}</span>`:""}
+        ${x.witness?`<span class="k">witness</span><span class="mono small">${esc(x.witness)}</span>`:""}
+        ${x.data?.fix_hint?`<span class="k">fix hint</span><span class="small">${esc(x.data.fix_hint)}</span>`:""}
+      </div></details>`).join("") || `<p class="muted">nothing at the selected severities</p>`;
+    bindInvCards(m);
+  };
+  m.querySelectorAll("[data-sev]").forEach(c=>c.onchange=draw); draw();
+}
+
+load().catch(e => { $("#main").innerHTML = `<div class="banner">Could not load: ${esc(e.message)}</div>`; });
+})();
+</script>

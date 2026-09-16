@@ -106,6 +106,10 @@ okta-policy-analyzer apply plan.json --dry-run                       # exact API
 okta-policy-analyzer apply plan.json --yes                           # writes plan.json.applied.json for rollback
 okta-policy-analyzer rollback plan.json.applied.json --yes
 
+# 3d. Web UI: author invariants, browse policies and principals, see the violating cases, propose fixes
+okta-policy-analyzer serve snapshots/acme --invariants corpsec-invariants.txt      # http://127.0.0.1:8765
+okta-policy-analyzer serve snapshots/acme --export review.html                     # read-only page to share
+
 # 4. Ask targeted questions
 okta-policy-analyzer who snapshots/acme --app Salesforce --max-strength ONE_FA_KNOWLEDGE  # who gets in with a password only?
 okta-policy-analyzer explain snapshots/acme --user alice@acme.com --zone VPN --managed --platform MACOS
@@ -167,6 +171,17 @@ stronger authentication, and whether anything became *more* permissive) and list
 introduces. The plan is JSON containing the exact Okta API operations; `apply --dry-run` prints them,
 `apply --yes` sends them and records a rollback file, `rollback --yes` undoes them. See
 [docs/remediation.md](docs/remediation.md).
+
+## Web UI
+
+`serve` opens a local workbench (stdlib HTTP server, no extra dependencies) with five pages: **Overview**
+(weakest way in per app, assumptions), **Invariants** (write a sentence, see its reading, verdict and
+counterexample; save it to the invariants file; propose the rule that makes it hold and, on a server started
+with `--allow-apply`, apply it after typing APPLY), **Policies** (rules in evaluation order with conditions,
+accepted strength, who reaches them, shadowing, Okta JSON), **Principals** (groups, users, zones, device
+assurance, user types, apps, authenticators, each with the rules that reference it and the weakest/strongest
+outcome per policy) and **Violations** (invariant counterexamples and policy findings with witnesses).
+`--export page.html` writes the same view as a self-contained read-only page.
 
 ## Assertions
 
@@ -259,6 +274,7 @@ src/okta_policy_analyzer/
   assertions.py        YAML assertions
   invariants.py        plain-English invariants -> assertions + formal reading
   remediation.py       violated invariant -> rule change proved in the model; apply / rollback
+  ui.py, ui/index.html local web UI (serve) and read-only export
   interpreter.py       concrete reference interpreter
   tla.py               TLA+ export + TLC runner
   report.py, cli.py

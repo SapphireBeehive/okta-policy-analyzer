@@ -92,6 +92,8 @@ allows on paper but no enabled authenticator can satisfy it (an effective lock-o
 
 ## Other commands you may need
 
+- `okta-policy-analyzer serve SNAPSHOT --invariants FILE` — local web UI to author invariants and browse
+  policies, principals and violations; `--export page.html` for a read-only page.
 - `okta-policy-analyzer analyze SNAPSHOT --format markdown -o report.md` — full report for the person.
 - `okta-policy-analyzer diff OLD NEW` — what a policy change did: per app EQUIVALENT / MORE_PERMISSIVE /
   LESS_PERMISSIVE / INCOMPARABLE, with exactly who gained or lost access.

@@ -286,6 +286,24 @@ def cmd_rollback(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Local web UI: author invariants, browse policies/principals, see violations, propose and apply fixes."""
+    from .ui import UIState, serve
+
+    state = UIState.load(args.snapshot, args.invariants, allow_apply=args.allow_apply, options=_options(args))
+    if args.export:
+        Path(args.export).write_text(state.export_html(), encoding="utf-8")
+        print(f"read-only page written to {args.export}")
+        return 0
+    if args.allow_apply and not (os.environ.get("OKTA_API_TOKEN") or os.environ.get("OKTA_ACCESS_TOKEN")):
+        print(
+            "warning: --allow-apply given but no OKTA_API_TOKEN/OKTA_ACCESS_TOKEN in the environment",
+            file=sys.stderr,
+        )
+    serve(state, host=args.host, port=args.port)
+    return 0
+
+
 def cmd_explain(args: argparse.Namespace) -> int:
     from .assurance import Catalogue, classify_rule, combined_rule_strength
     from .interpreter import Interpreter, World, world_from_user
@@ -781,6 +799,21 @@ def build_parser() -> argparse.ArgumentParser:
     rb.add_argument("--dry-run", action="store_true")
     rb.add_argument("--yes", action="store_true")
     rb.set_defaults(func=cmd_rollback)
+
+    sv_ui = sub.add_parser("serve", help="local web UI (invariants, policies, principals, violations, fixes)")
+    sv_ui.add_argument("snapshot", help="snapshot directory or file")
+    sv_ui.add_argument("--invariants", help="text file of invariants (one per line) the UI reads and saves")
+    sv_ui.add_argument("--host", default="127.0.0.1")
+    sv_ui.add_argument("--port", type=int, default=8765)
+    sv_ui.add_argument(
+        "--allow-apply",
+        action="store_true",
+        help="enable the Apply button (writes to the org; needs OKTA_ORG_URL + token in the environment)",
+    )
+    sv_ui.add_argument("--export", help="write a self-contained read-only HTML page instead of serving")
+    sv_ui.add_argument("--authenticator-overrides", help="authenticator characteristics overrides (YAML)")
+    sv_ui.add_argument("-v", "--verbose", dest="verbose_sub", action="store_true")
+    sv_ui.set_defaults(func=cmd_serve, no_cubes=True)
 
     e = sub.add_parser("explain", help="evaluate one concrete user/context with the reference interpreter")
     e.add_argument("snapshot")

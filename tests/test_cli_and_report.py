@@ -158,6 +158,7 @@ def test_all_subcommands_registered() -> None:
         "propose",
         "apply",
         "rollback",
+        "serve",
         "explain",
         "who",
         "export-tla",

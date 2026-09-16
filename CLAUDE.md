@@ -32,6 +32,17 @@ okta-policy-analyzer analyze snapshots/<date> --no-cubes      # orient: findings
 - Snapshots live in `snapshots/` (git-ignored). Keep one per day you operate; `diff` compares them.
 - No token and no snapshot → say so and stop. Never invent policy data.
 
+## Web UI
+
+```bash
+okta-policy-analyzer serve SNAPSHOT --invariants invariants.txt            # http://127.0.0.1:8765
+okta-policy-analyzer serve SNAPSHOT --invariants invariants.txt --allow-apply   # enables Apply (typed APPLY confirmation)
+okta-policy-analyzer serve SNAPSHOT --export review.html                    # read-only page to hand to a reviewer
+```
+
+Offer the UI when the human wants to browse (policies, principals, violations) or author several invariants;
+use the CLI for scripted checks. The UI's Apply button obeys the same rules of engagement as `apply --yes`.
+
 ## Check (read-only)
 
 ```bash
@@ -117,6 +128,7 @@ src/okta_policy_analyzer/
   smt/               z3 encoding (universe, EL, rules, first-match chains, projection)
   analysis.py        findings + who-can-do-what
   invariants.py      plain-English -> assertion + formal reading (check)
+  ui.py, ui/         local web UI (serve, --export)
   remediation.py     violated invariant -> rule change, proved in the model (propose/apply/rollback)
   assertions.py, diff.py, interpreter.py, tla.py, report.py, cli.py
 docs/invariants.md   controlled-English phrasebook
