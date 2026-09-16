@@ -31,6 +31,7 @@ class AnalysisOptions:
     include_inactive_policies: bool = True
     full_cubes: bool = True  # also compute joint who+context cubes per rule (bounded)
     full_cube_limit: int = 12
+    combined_who: bool = False  # WHO descriptions for every session-rule × app-rule pair (expensive)
 
 
 @dataclass

@@ -48,6 +48,7 @@ def _options(args: argparse.Namespace):
         authenticator_overrides=overrides,
         full_cubes=not getattr(args, "no_cubes", False),
         dnf_limit=getattr(args, "dnf_limit", 48),
+        combined_who=bool(getattr(args, "combined_who", False)),
     )
 
 
@@ -452,6 +453,11 @@ def build_parser() -> argparse.ArgumentParser:
             "--no-cubes", action="store_true", help="skip joint who+context cube enumeration (faster)"
         )
         sp.add_argument("--dnf-limit", type=int, default=48, help="max prime implicants per description")
+        sp.add_argument(
+            "--combined-who",
+            action="store_true",
+            help="describe WHO for every session-rule × app-rule pair (slow)",
+        )
 
     a = sub.add_parser("analyze", help="analyze a snapshot: who can do what, findings, assertions")
     analysis_opts(a)

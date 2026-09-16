@@ -189,13 +189,19 @@ def _drop_priority(var: z3.ExprRef) -> tuple[int, str]:
 def _irredundant(cubes: list[Cube], ax: z3.BoolRef) -> list[Cube]:
     """Drop cubes whose models are already covered by the remaining cubes (prefer keeping shorter cubes)."""
     keep = list(cubes)
+    exprs = [c.expr() for c in keep]
+    s = z3.Solver()
+    s.add(ax)
     i = len(keep) - 1
     while i >= 0 and len(keep) > 1:
-        others = keep[:i] + keep[i + 1 :]
-        s = z3.Solver()
-        s.add(ax, keep[i].expr(), z3.Not(z3.Or(*[c.expr() for c in others])))
-        if s.check() == z3.unsat:
-            keep = others
+        others = exprs[:i] + exprs[i + 1 :]
+        s.push()
+        s.add(exprs[i], z3.Not(z3.Or(*others)))
+        covered = s.check() == z3.unsat
+        s.pop()
+        if covered:
+            del keep[i]
+            del exprs[i]
         i -= 1
     return keep
 
@@ -212,17 +218,19 @@ def _model_cube(model: z3.ModelRef, variables: Sequence[z3.ExprRef]) -> list[Lit
 
 
 def _minimise(cube: list[Lit], checker: z3.Solver) -> list[Lit]:
-    """Drop literals while the cube still implies the formula (checker holds axioms ∧ ¬formula)."""
+    """Drop literals while the cube still implies the formula (checker holds axioms ∧ ¬formula).
+
+    Uses assumption-based incremental checking with the literal expressions built once, so a cube of n
+    literals costs n incremental checks and no re-encoding.
+    """
     lits = list(cube)
+    exprs = [lit.expr() for lit in lits]
     i = 0
     while i < len(lits):
-        trial = lits[:i] + lits[i + 1 :]
-        checker.push()
-        checker.add(*[lit.expr() for lit in trial])
-        implies = checker.check() == z3.unsat
-        checker.pop()
-        if implies:
-            lits = trial
+        trial = exprs[:i] + exprs[i + 1 :]
+        if checker.check(*trial) == z3.unsat:
+            del lits[i]
+            del exprs[i]
         else:
             i += 1
     return lits
