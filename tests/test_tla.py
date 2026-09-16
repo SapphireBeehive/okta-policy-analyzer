@@ -54,7 +54,9 @@ def test_export_structure(acme: Tenant, tmp_path) -> None:
     # slicing: only groups the policy, its group rules and the session policies mention (Engineering is unreferenced)
     groups_line = next(line for line in text.splitlines() if line.startswith("Groups =="))
     assert '"00g_eng"' not in groups_line and '"00g_exec"' not in groups_line
-    assert '"00g_contractors"' in groups_line and '"00g_admins"' in groups_line  # admins via the session policy
+    assert (
+        '"00g_contractors"' in groups_line and '"00g_admins"' in groups_line
+    )  # admins via the session policy
     assert '"nzo_corp"' in text
     # the deleted group is substituted as a constant, not enumerated
     assert '"00g_deleted"' not in groups_line and "00g_deleted]=False" in text
