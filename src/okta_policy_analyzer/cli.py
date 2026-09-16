@@ -557,6 +557,33 @@ def build_parser() -> argparse.ArgumentParser:
         "--tlc-probes", action="store_true", help="also run one TLC probe per rule to report reachability"
     )
     x.set_defaults(func=cmd_export_tla)
+    d = sub.add_parser(
+        "diff", help="formally compare two snapshots: who gained/lost access or got weaker auth"
+    )
+    d.add_argument("old", help="older snapshot directory or .json")
+    d.add_argument("new", help="newer snapshot directory or .json")
+    d.add_argument("--format", choices=["text", "json"], default="text")
+    d.add_argument("-o", "--output")
+    d.add_argument(
+        "--fail-on-more-permissive", action="store_true", help="exit 1 when any app became more permissive"
+    )
+    d.add_argument("--strict-group-rules", action="store_true")
+    d.add_argument("--authenticator-overrides")
+    d.set_defaults(func=cmd_diff)
+
+    sv = sub.add_parser(
+        "simulate-validate",
+        help="compare the model with Okta's policy simulation API (read-only, needs a token)",
+    )
+    analysis_opts(sv)
+    sv.add_argument("--org", help="org URL (defaults to the snapshot's)")
+    sv.add_argument("--token-env", default="OKTA_API_TOKEN")
+    sv.add_argument("--bearer-env", default="OKTA_ACCESS_TOKEN")
+    sv.add_argument("--app", help="only this app")
+    sv.add_argument("--samples", type=int, default=25, help="sampled worlds per app")
+    sv.add_argument("--seed", type=int, default=0)
+    sv.set_defaults(func=cmd_simulate_validate)
+
     return p
 
 

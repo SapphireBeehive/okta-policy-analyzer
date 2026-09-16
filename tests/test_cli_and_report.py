@@ -128,3 +128,26 @@ def test_version(capsys) -> None:
     except SystemExit as e:
         assert e.code == 0
     assert capsys.readouterr().out.strip()
+
+
+def test_all_subcommands_registered() -> None:
+    from okta_policy_analyzer.cli import build_parser
+
+    parser = build_parser()
+    sub = next(a for a in parser._actions if a.dest == "command")
+    assert set(sub.choices) == {
+        "fetch",
+        "analyze",
+        "verify",
+        "explain",
+        "who",
+        "export-tla",
+        "diff",
+        "simulate-validate",
+    }
+    ns = parser.parse_args(["simulate-validate", "snap", "--app", "X", "--samples", "3"])
+    assert ns.samples == 3 and ns.func.__name__ == "cmd_simulate_validate"
+    ns = parser.parse_args(["diff", "a", "b", "--fail-on-more-permissive"])
+    assert ns.func.__name__ == "cmd_diff"
+    ns = parser.parse_args(["analyze", "snap", "-j", "4", "--no-cubes", "--combined-who"])
+    assert ns.jobs == 4 and ns.combined_who
