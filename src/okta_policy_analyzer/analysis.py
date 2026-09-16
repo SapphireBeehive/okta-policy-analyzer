@@ -493,32 +493,46 @@ class Analyzer:
         cells: list[GroupCell] = []
         for a in access:
             ep = self.enc.access_policy(a.policy)
-            by_rule = {ra.rule.id: ra for ra in a.rules}
+            # per class: the formula "a reachable rule of this class decides" (DENY includes DENY rules only)
+            by_class: dict[Strength, list[RuleAnalysis]] = {}
+            for ra in a.rules:
+                if ra.reachable:
+                    c = ra.strength if ra.assurance.access == Access.ALLOW else Strength.DENY
+                    by_class.setdefault(c, []).append(ra)
+            class_f = {c: z3.Or(*[ep.effective[ra.index] for ra in ras]) for c, ras in by_class.items()}
+            ordered = sorted(class_f)
             for gid in referenced:
                 member = self.u.member[gid]
-                reachable = [(ra, ep.effective[ra.index]) for ra in a.rules if ra.reachable]
-                classes: list[tuple[Strength, RuleAnalysis]] = []
-                for ra, eff in reachable:
-                    c = ra.strength if ra.assurance.access == Access.ALLOW else Strength.DENY
-                    if self.sat(member, eff):
-                        classes.append((c, ra))
-                if not classes:
-                    continue
-                classes.sort(key=lambda x: x[0])
-                weakest_allow = next(((c, ra) for c, ra in classes if c > Strength.DENY), None)
-                weakest, rule = weakest_allow if weakest_allow else (Strength.DENY, classes[0][1])
-                strongest = max(c for c, _ in classes)
+                weakest: Strength | None = None
+                weak_rule = ""
+                for c in ordered:  # ascending: the first satisfiable ALLOW class is the weakest
+                    if c <= Strength.NO_PATH:
+                        continue
+                    if self.sat(member, class_f[c]):
+                        weakest = c
+                        weak_rule = next(
+                            ra.rule.name for ra in by_class[c] if self.sat(member, ep.effective[ra.index])
+                        )
+                        break
+                strongest: Strength | None = None
+                for c in reversed(ordered):  # descending: the first satisfiable class is the strongest
+                    if self.sat(member, class_f[c]):
+                        strongest = c
+                        break
+                if strongest is None:
+                    continue  # members of this group never reach this policy at all
+                if weakest is None:
+                    weakest = Strength.DENY
+                    weak_rule = next(
+                        ra.rule.name
+                        for ra in by_class.get(Strength.DENY, [])
+                        if self.sat(member, ep.effective[ra.index])
+                    )
                 cells.append(
                     GroupCell(
-                        self.t.group_name(gid),
-                        a.policy.name,
-                        a.app_labels,
-                        weakest,
-                        strongest,
-                        rule.rule.name,
+                        self.t.group_name(gid), a.policy.name, a.app_labels, weakest, strongest, weak_rule
                     )
                 )
-                _ = by_rule
         return cells
 
     def _run_access_parallel(self, jobs: int) -> list[AccessPolicyAnalysis]:
