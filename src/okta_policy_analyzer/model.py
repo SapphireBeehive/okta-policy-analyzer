@@ -263,6 +263,7 @@ class RuleConditions:
     el: ElCondition | None = None
     auth_type: str | None = None  # ANY normalised to None; LDAP_INTERFACE | RADIUS
     idp: IdpCondition | None = None
+    behaviors: list[str] = field(default_factory=list)  # risk.behaviors (behavior ids/names), any-of
     unsupported: dict[str, Any] = field(default_factory=dict)  # condition keys we do not model
 
 

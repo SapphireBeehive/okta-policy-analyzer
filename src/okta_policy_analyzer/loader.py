@@ -76,7 +76,7 @@ KNOWN_CONDITION_KEYS = {
     "passwordExpiration",
     "beforeScheduledAction",
     "userIdentifier",
-    "risk",
+    "risk",  # behaviors, modelled as opaque atoms
     "riskDetection",
     "behaviors",
     "userStatus",
@@ -310,8 +310,27 @@ class TenantLoader:
                     )
                 )
             if "factors" in settings and not pol.authenticator_settings:
+                # Classic-migrated shape: settings.factors = {factorKey: {enroll: {self: ...}}}
+                merged: dict[str, EnrollStatus] = {}
+                for fkey, fval in (settings.get("factors") or {}).items():
+                    akey = _CLASSIC_FACTOR_KEYS.get(fkey)
+                    if akey is None:
+                        self.warn(
+                            f"enrollment policy {pol.name!r}: unknown Classic factor key {fkey!r} ignored"
+                        )
+                        continue
+                    enroll = ((fval or {}).get("enroll") or {}).get("self")
+                    try:
+                        es = EnrollStatus(str(enroll).upper()) if enroll else EnrollStatus.NOT_ALLOWED
+                    except ValueError:
+                        es = EnrollStatus.NOT_ALLOWED
+                    # several Classic factors map to one authenticator: the most permissive status wins
+                    if akey not in merged or _ENROLL_RANK[es] > _ENROLL_RANK[merged[akey]]:
+                        merged[akey] = es
+                for akey, es in merged.items():
+                    pol.authenticator_settings.append(AuthenticatorSetting(key=akey, enroll_self=es))
                 self.warn(
-                    f"enrollment policy {pol.name!r} uses Classic 'factors' settings; enrollment feasibility checks are skipped for it"
+                    f"enrollment policy {pol.name!r} uses Classic 'factors' settings; mapped onto authenticator keys"
                 )
         return pol
 
@@ -470,7 +489,15 @@ class TenantLoader:
         return vm
 
     def _signon_action(self, s: dict[str, Any]) -> SignOnAction:
-        access = Access(str(s.get("access") or "ALLOW").upper())
+        raw_access = str(s.get("access") or "ALLOW").upper()
+        if raw_access == "CHALLENGE":  # Classic factor sequencing: allow with MFA
+            self.warn(
+                "global session rule uses Classic 'CHALLENGE' access; modelled as ALLOW with requireFactor=true"
+            )
+            access = Access.ALLOW
+            s = {**s, "requireFactor": True}
+        else:
+            access = Access(raw_access) if raw_access in ("ALLOW", "DENY") else Access.ALLOW
         pf = str(s.get("primaryFactor") or "PASSWORD_IDP").upper()
         try:
             primary = PrimaryFactor(pf)
@@ -528,6 +555,26 @@ class TenantLoader:
 
 
 # ------------------------------------------------------------------------------------------ helpers
+
+_CLASSIC_FACTOR_KEYS = {
+    "okta_otp": "okta_verify",
+    "okta_push": "okta_verify",
+    "okta_sms": "phone_number",
+    "okta_call": "phone_number",
+    "okta_email": "okta_email",
+    "okta_password": "okta_password",
+    "okta_question": "security_question",
+    "google_otp": "google_otp",
+    "fido_webauthn": "webauthn",
+    "fido_u2f": "webauthn",
+    "duo": "duo",
+    "rsa_token": "onprem_mfa",
+    "symantec_vip": "symantec_vip",
+    "yubikey_token": "yubikey_token",
+    "hotp": "custom_otp",
+    "onprem_mfa": "onprem_mfa",
+}
+_ENROLL_RANK = {EnrollStatus.NOT_ALLOWED: 0, EnrollStatus.OPTIONAL: 1, EnrollStatus.REQUIRED: 2}
 
 
 _CONSTRAINT_KEYS = {

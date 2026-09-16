@@ -9,8 +9,12 @@ Semantics (Okta Identity Engine):
 * ``network``: connection ZONE with ``include`` matches inside any included zone; ``exclude`` matches
   outside every excluded zone. Zones may overlap.
 * Rules of a policy are evaluated in priority order and the **first** matching *active* rule decides.
-* Global session and enrollment policies are themselves chosen by priority: the first *active* policy whose
-  group condition holds for the user is evaluated, and only that one.
+* Global session and enrollment policies are themselves chosen by priority: policies are considered in priority
+  order; the first *active* policy whose group condition holds for the user **and** that has a matching rule is
+  applied. A group-matching policy none of whose rules match falls through to the next policy (Okta Policy API:
+  "If none of the policy rules have conditions that can be met, then the next policy in the list is considered").
+* A ``system`` (default) policy without an explicit group assignment applies to everyone; a custom policy without
+  group assignment applies to nobody.
 """
 
 from __future__ import annotations
@@ -41,9 +45,15 @@ class EncodedPolicy:
     policy: Policy
     rules: list[Rule]  # active rules in evaluation order
     match: list[z3.BoolRef]  # match_i
-    effective: list[z3.BoolRef]  # eff_i = match_i ∧ ¬∨_{j<i} match_j
+    effective: list[z3.BoolRef]  # eff_i = match_i ∧ ¬∨_{j<i} match_j (within the policy)
     no_match: z3.BoolRef  # ¬∨ match_i
-    selected: z3.BoolRef  # policy-level selection (True for ACCESS_POLICY)
+    applies: z3.BoolRef  # policy-level group condition holds (True for ACCESS_POLICY)
+    selected: z3.BoolRef  # this policy decides: applies ∧ some rule matches ∧ no earlier policy decided
+    reachable: z3.BoolRef  # applies ∧ no earlier policy decided (the policy is consulted)
+
+    def decides(self, i: int) -> z3.BoolRef:
+        """Rule i of this policy is the one applied to the world."""
+        return z3.And(self.reachable, self.effective[i])
 
     def rule_index(self, rule_id: str) -> int:
         for i, r in enumerate(self.rules):
@@ -124,6 +134,8 @@ class PolicyEncoder:
                 parts.append(z3.Not(u.user_type_is(t)))
         if c.el:
             parts.append(self.el.encode_bool(c.el.ast) if c.el.ast is not None else u.opaque(c.el.text))
+        if c.behaviors:
+            parts.append(z3.Or(*[u.opaque(f"behavior {b} detected") for b in c.behaviors]))
         if c.auth_type:
             parts.append(u.auth_type_is(c.auth_type))
         if c.idp:
@@ -154,9 +166,16 @@ class PolicyEncoder:
         return z3.And(*parts) if parts else z3.BoolVal(True)
 
     # ------------------------------------------------------------------------------ policies
-    def encode_policy(self, policy: Policy, selected: z3.BoolRef | None = None) -> EncodedPolicy:
+    def encode_policy(
+        self,
+        policy: Policy,
+        *,
+        applies: z3.BoolRef | None = None,
+        earlier_decided: list[z3.BoolRef] | None = None,
+    ) -> EncodedPolicy:
         key = policy.id
-        if key in self._encoded and selected is None:
+        standalone = applies is None and not earlier_decided
+        if standalone and key in self._encoded:
             return self._encoded[key]
         rules = policy.active_rules()
         matches = [self.match(r) for r in rules]
@@ -164,39 +183,45 @@ class PolicyEncoder:
         for i, m in enumerate(matches):
             prior = matches[:i]
             effective.append(z3.And(m, z3.Not(z3.Or(*prior))) if prior else m)
-        no_match = z3.Not(z3.Or(*matches)) if matches else z3.BoolVal(True)
-        ep = EncodedPolicy(
-            policy,
-            rules,
-            matches,
-            effective,
-            no_match,
-            selected if selected is not None else z3.BoolVal(True),
-        )
-        if selected is None:
+        any_match = z3.Or(*matches) if matches else z3.BoolVal(False)
+        no_match = z3.Not(any_match)
+        applies_f = applies if applies is not None else z3.BoolVal(True)
+        not_earlier = z3.Not(z3.Or(*earlier_decided)) if earlier_decided else z3.BoolVal(True)
+        reachable = z3.And(applies_f, not_earlier)
+        selected = z3.And(reachable, any_match)
+        ep = EncodedPolicy(policy, rules, matches, effective, no_match, applies_f, selected, reachable)
+        if standalone:
             self._encoded[key] = ep
         return ep
 
-    def encode_prioritised(self, policies: list[Policy]) -> list[EncodedPolicy]:
-        """Encode a family of group-assigned policies (global session / enrollment) chosen by priority."""
+    def policy_applies(self, pol: Policy) -> z3.BoolRef:
+        """Policy-level group condition. Default (system) policies without groups apply to everyone."""
         u = self.u
+        if pol.group_include:
+            known = [u.member[g] for g in pol.group_include if g in u.member]
+            return z3.Or(*known) if known else z3.BoolVal(False)
+        if pol.system:
+            return z3.BoolVal(True)
+        u.assumptions.append(
+            f"policy {pol.name!r} has no group assignment and is not a default policy; it applies to nobody"
+        )
+        return z3.BoolVal(False)
+
+    def encode_prioritised(self, policies: list[Policy]) -> list[EncodedPolicy]:
+        """Encode group-assigned policies (global session / enrollment) chosen by priority, with fall-through."""
         out: list[EncodedPolicy] = []
-        prior: list[z3.BoolRef] = []
+        decided: list[z3.BoolRef] = []
         for pol in policies:
             if not pol.is_active:
                 continue
-            if pol.group_include:
-                applies = (
-                    z3.Or(*[u.member[g] for g in pol.group_include if g in u.member])
-                    if any(g in u.member for g in pol.group_include)
-                    else z3.BoolVal(False)
-                )
-            else:
-                applies = z3.BoolVal(True)
-            sel = z3.And(applies, z3.Not(z3.Or(*prior))) if prior else applies
-            out.append(self.encode_policy(pol, selected=sel))
-            prior.append(applies)
+            ep = self.encode_policy(pol, applies=self.policy_applies(pol), earlier_decided=list(decided))
+            out.append(ep)
+            decided.append(ep.selected)
         return out
+
+    def family_no_decision(self, encoded: list[EncodedPolicy]) -> z3.BoolRef:
+        """No policy of the family decides (only possible if the default policy's catch-all is missing)."""
+        return z3.Not(z3.Or(*[ep.selected for ep in encoded])) if encoded else z3.BoolVal(True)
 
     @cached_property
     def session_policies(self) -> list[EncodedPolicy]:
