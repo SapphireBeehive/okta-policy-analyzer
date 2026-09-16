@@ -112,7 +112,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     elif args.format == "markdown":
         _emit(render_markdown(result, assertions), args.output)
     elif args.format == "sarif":
-        _emit(render_sarif(result), args.output)
+        _emit(render_sarif(result, snapshot_uri=args.snapshot), args.output)
     else:
         if args.output:
             with open(args.output, "w", encoding="utf-8") as fh:
@@ -154,6 +154,20 @@ def cmd_explain(args: argparse.Namespace) -> int:
     if args.assurance:
         ctx["assurances"] = {_assurance_id(tenant, a) for a in args.assurance}
         ctx.setdefault("registered", True)
+        plats = {
+            tenant.device_assurances[d].platform for d in ctx["assurances"] if d in tenant.device_assurances
+        }
+        if len(plats) > 1:
+            raise ValueError(
+                f"device assurance policies for different platforms given: {sorted(p.value for p in plats)}"
+            )
+        if plats:
+            (plat,) = plats
+            if "platform" in ctx and ctx["platform"] != plat:
+                raise ValueError(
+                    f"device assurance policy is for {plat.value} but --platform {ctx['platform'].value} was given"
+                )
+            ctx["platform"] = plat
     if args.risk:
         ctx["risk"] = RiskLevel(args.risk.upper())
     if args.user:
@@ -184,6 +198,11 @@ def cmd_explain(args: argparse.Namespace) -> int:
     print(
         f"World: groups={{{', '.join(tenant.group_name(g) for g in sorted(world.groups))}}} zones={{{', '.join(tenant.zone_name(z) for z in sorted(world.zones))}}} "
         f"device={'managed' if world.managed else ('registered' if world.registered else 'unregistered')} {world.platform.value} risk={world.risk.value}"
+        + (
+            f" assurance={{{', '.join(tenant.device_assurances[d].name if d in tenant.device_assurances else d for d in sorted(world.assurances))}}}"
+            if world.assurances
+            else ""
+        )
     )
     sel = it.select(tenant.session_policies, world)
     session_action = None
@@ -199,10 +218,14 @@ def cmd_explain(args: argparse.Namespace) -> int:
     else:
         print("\nGlobal session policy: no policy decides (denied)")
     enr = it.select(tenant.enrollment_policies, world)
+    allowed: set[str] | None = None
     if enr:
         pol, rule = enr
-        allowed = [s.key for s in pol.authenticator_settings if s.enroll_self.value != "NOT_ALLOWED"]
-        print(f"Enrollment policy: {pol.name} → can enroll: {', '.join(allowed) or '(unknown)'}")
+        if pol.authenticator_settings:
+            allowed = {s.key for s in pol.authenticator_settings if s.enroll_self.value != "NOT_ALLOWED"}
+        print(
+            f"Enrollment policy: {pol.name} → can enroll: {', '.join(sorted(allowed)) if allowed else '(unknown)'}"
+        )
     print("\nApps:")
     apps = [a for a in tenant.apps.values() if not args.app or a.label == args.app or a.id == args.app]
     for app in sorted(apps, key=lambda a: a.label):
@@ -218,6 +241,11 @@ def cmd_explain(args: argparse.Namespace) -> int:
         line = f"  {app.label}: [{pol.name}] rule {rule.name!r} → {ra.label}"
         if session_action is not None and ra.paths:
             line += f"; with session policy: {combined_rule_strength(session_action, ra).label}"
+        if allowed is not None and ra.paths and enr is not None:
+            enrollable = [p for p in ra.paths if p.authenticator_keys <= allowed]
+            if not enrollable:
+                needed = sorted({k for p in ra.paths for k in p.authenticator_keys} - allowed)
+                line += f" — LOCKED OUT: every accepted path needs one of {needed}, not enrollable under {enr[0].name!r}"
         print(line)
         if args.verbose and ra.paths:
             for p in ra.paths:
@@ -255,7 +283,9 @@ def cmd_who(args: argparse.Namespace) -> int:
         strength = ra.weakest if ra.access.value == "ALLOW" else Strength.DENY
         if min_s is not None and strength < min_s:
             continue
-        if max_s is not None and strength > max_s:
+        if max_s is not None and (
+            strength > max_s or (strength <= Strength.NO_PATH and not args.include_deny)
+        ):
             continue
         if not an.sat(ep.effective[i]):
             continue
@@ -356,7 +386,17 @@ def cmd_simulate_validate(args: argparse.Namespace) -> int:
     with OktaClient(args.org or tenant.org_url, api_token=token, bearer_token=bearer) as client:
         for app in sorted(apps, key=lambda a: a.label):
             rep = validate_app(an, client, app, samples=args.samples, seed=args.seed)
-            status = "OK" if rep.ok else f"{len(rep.mismatches)} MISMATCH(ES)"
+            status = (
+                "OK"
+                if rep.ok
+                else (
+                    "INCONCLUSIVE (0 verdicts compared)"
+                    if rep.inconclusive
+                    else f"{len(rep.mismatches)} MISMATCH(ES)"
+                )
+            )
+            if rep.inconclusive:
+                rc = max(rc, 3)
             print(
                 f"{app.label}: {rep.compared} verdicts compared from {rep.samples} sampled worlds; skipped {rep.skipped_not_assigned} unassigned, {rep.skipped_unsupported} undefined → {status}"
             )
@@ -510,6 +550,13 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument(
             "-j", "--jobs", type=int, default=1, help="analyse authentication policies in N worker processes"
         )
+        sp.add_argument(
+            "-v",
+            "--verbose",
+            dest="verbose_sub",
+            action="store_true",
+            help="show INFO findings and rule tables",
+        )
 
     a = sub.add_parser("analyze", help="analyze a snapshot: who can do what, findings, assertions")
     analysis_opts(a)
@@ -540,13 +587,18 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--assurance", action="append", help="device assurance policy satisfied (repeatable)")
     e.add_argument("--risk", help="LOW MEDIUM HIGH")
     e.add_argument("--app", help="only this app")
+    e.add_argument("-v", "--verbose", dest="verbose_sub", action="store_true")
     e.set_defaults(func=cmd_explain)
 
     w = sub.add_parser("who", help="who can obtain which form of authentication for an app")
     analysis_opts(w)
     w.add_argument("--app", required=True, help="app label/id or policy name/id")
     w.add_argument("--min-strength", help="only outcomes at least this strong (Strength name)")
-    w.add_argument("--max-strength", help="only outcomes at most this strong (Strength name)")
+    w.add_argument(
+        "--max-strength",
+        help="only ALLOW outcomes at most this strong (Strength name); DENY rows are hidden unless --include-deny",
+    )
+    w.add_argument("--include-deny", action="store_true", help="keep DENY rows when --max-strength is given")
     w.set_defaults(func=cmd_who)
 
     x = sub.add_parser("export-tla", help="export TLA+ modules (optionally run TLC)")
@@ -590,11 +642,29 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Exit codes: 0 ok, 1 findings/violations (when requested), 2 usage or input error, 3 Okta API error."""
     args = build_parser().parse_args(argv)
+    verbose = bool(getattr(args, "verbose", False) or getattr(args, "verbose_sub", False))
+    args.verbose = verbose
     logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARNING, format="%(levelname)s %(message)s"
+        level=logging.INFO if verbose else logging.WARNING, format="%(levelname)s %(message)s"
     )
-    return int(args.func(args))
+    try:
+        return int(args.func(args))
+    except KeyboardInterrupt:
+        return 130
+    except Exception as e:  # noqa: BLE001 - turn expected operational failures into clean messages
+        import yaml
+
+        from .okta.client import OktaAPIError
+
+        if isinstance(e, OktaAPIError):
+            print(f"error: Okta API: {e}", file=sys.stderr)
+            return 3
+        if isinstance(e, ValueError | FileNotFoundError | OSError | KeyError | yaml.YAMLError):
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        raise
 
 
 if __name__ == "__main__":  # pragma: no cover

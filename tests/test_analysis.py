@@ -94,7 +94,7 @@ def test_outcome_tables(result: AnalysisResult) -> None:
     assert std.combined_weakest == Strength.ONE_FA_KNOWLEDGE
 
     dash = by_id["rst_dashboard"]
-    assert dash.weakest == Strength.TWO_FA and dash.outcomes[0].who == ["everyone, in every context"]
+    assert dash.weakest == Strength.TWO_FA and dash.outcomes[0].who == ["everyone (in some context)"]
     assert not dash.rules[1].reachable and dash.rules[1].shadowed_by[0].name == "Everyone 2FA"
 
     weak = by_id["rst_weak"]

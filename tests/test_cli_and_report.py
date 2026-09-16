@@ -95,7 +95,22 @@ def test_who(capsys) -> None:
     rc = main(["who", FIXTURE, "--app", "Salesforce", "--max-strength", "ONE_FA_KNOWLEDGE", "--no-cubes"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "Sales on mobile" in out and "Service accounts denied" in out
+    assert (
+        "Sales on mobile" in out and "Service accounts denied" not in out
+    )  # DENY rows hidden with --max-strength
+    rc = main(
+        [
+            "who",
+            FIXTURE,
+            "--app",
+            "Salesforce",
+            "--max-strength",
+            "ONE_FA_KNOWLEDGE",
+            "--include-deny",
+            "--no-cubes",
+        ]
+    )
+    assert rc == 0 and "Service accounts denied" in capsys.readouterr().out
     assert "who:" in out and "when:" in out
 
 

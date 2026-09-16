@@ -88,10 +88,16 @@ class Witness:
         zname = (lambda z: tenant.zone_name(z) if tenant else z) if tenant else (lambda z: z)
         parts: list[str] = []
         if self.user:
-            parts.append(f"user={self.user}")
+            login = (
+                next((usr.login for usr in tenant.users if usr.id == self.user), self.user)
+                if tenant
+                else self.user
+            )
+            parts.append(f"user={login}")
         parts.append("groups={" + ", ".join(name(g) for g in self.groups_in) + "}")
         if self.user_type:
-            parts.append(f"userType={self.user_type}")
+            ut = tenant.user_types.get(self.user_type) if tenant else None
+            parts.append(f"userType={ut.name if ut else self.user_type}")
         for k, v in self.attributes.items():
             parts.append(f"{k}={v}")
         parts.append(
@@ -107,7 +113,11 @@ class Witness:
         if self.platform:
             dev.append(self.platform)
         if self.assurances:
-            dev.append("assurance={" + ", ".join(self.assurances) + "}")
+            names_ = [
+                (tenant.device_assurances[a].name if tenant and a in tenant.device_assurances else a)
+                for a in self.assurances
+            ]
+            dev.append("assurance={" + ", ".join(names_) + "}")
         if dev:
             parts.append("device=" + " ".join(dev))
         if self.risk:
@@ -142,6 +152,9 @@ class Universe:
         self.attr_vars: dict[str, z3.ArithRef] = {}
         self.pred_vars: dict[str, z3.BoolRef] = {}
         self.pred_meta: dict[str, tuple[str, str, Any]] = {}  # name -> (function, attr path, literal)
+        self.revision = (
+            0  # bumped whenever a new variable/literal/opaque atom is created (axioms must be re-read)
+        )
         self._pred_truth: dict[str, Any] = {}  # name -> callable deciding the predicate for a concrete value
         self._pred_linked: set[tuple[str, Any]] = set()  # (predicate name, literal) pairs already constrained
         self.opaque_vars: dict[str, z3.BoolRef] = {}
@@ -222,6 +235,7 @@ class Universe:
         if path not in self.attr_vars:
             self.attr_vars[path] = z3.Int(f"attr:{path}")
             self.attr_literals.setdefault(path, [])
+            self.revision += 1
         return self.attr_vars[path]
 
     def attr_equals(self, path: str, literal: Any) -> z3.BoolRef:
@@ -231,6 +245,7 @@ class Universe:
         key = NULL if literal is None else literal
         if key not in lits:
             lits.append(key)
+            self.revision += 1
         return v == lits.index(key)
 
     def attr_other(self, path: str) -> z3.BoolRef:
@@ -245,6 +260,7 @@ class Universe:
         """
         name = f"pred:{function}({path},{literal!r})"
         if name not in self.pred_vars:
+            self.revision += 1
             self.pred_vars[name] = z3.Bool(name)
             self.pred_meta[name] = (function, path, literal)
             self.attr_var(path)
@@ -254,6 +270,7 @@ class Universe:
     def opaque(self, text: str) -> z3.BoolRef:
         """A free Boolean standing for an uninterpreted expression fragment (shared by identical text)."""
         if text not in self.opaque_vars:
+            self.revision += 1
             self.opaque_vars[text] = z3.Bool(f"opaque:{text}")
             self.assumptions.append(f"expression fragment treated as an unconstrained predicate: {text}")
         return self.opaque_vars[text]
@@ -373,9 +390,14 @@ class Universe:
                 )
 
     def axioms(self) -> list[z3.BoolRef]:
-        """Domain axioms. Call after all rules are encoded (predicate/attribute links are finalised lazily)."""
+        """Domain axioms for the current state of the universe (predicate links and attribute bounds are finalised lazily).
+
+        Attribute variables are indices into their interned literal list (index ``len`` = any other value), so each
+        gets the finite bound ``0 <= v <= len(literals)``; without it, all-SAT would enumerate endless "other" values.
+        """
         self._finish_predicates()
-        return list(self._axioms)
+        bounds = [z3.And(v >= 0, v <= len(self.attr_literals[path])) for path, v in self.attr_vars.items()]
+        return list(self._axioms) + bounds
 
     # ------------------------------------------------------------------------------ variable classes
     def who_vars(self) -> list[z3.ExprRef]:

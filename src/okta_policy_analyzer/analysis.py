@@ -287,17 +287,47 @@ class Analyzer:
         ]
         self._session = self.enc.session_policies
         self._enroll = self.enc.enrollment_policies
-        self.axioms = self.u.axioms()
-        self._axiom_names = [var_names(a) for a in self.axioms]
+        self._axioms_cache: list[z3.BoolRef] = []
+        self._axioms_revision = -1
+        self._axiom_names: list[set[str]] = []
         self._slice_cache: dict[frozenset[str], list[z3.BoolRef]] = {}
+        self._population_cache: dict[tuple[str, int], z3.BoolRef] = {}
+        self._refresh_axioms()
 
     # ------------------------------------------------------------------------------ solver helpers
+    def _refresh_axioms(self) -> None:
+        """Re-read the universe's axioms when new literals/atoms were interned (assertions and diffs do that)."""
+        if self._axioms_revision != self.u.revision:
+            self._axioms_cache = self.u.axioms()
+            self._axiom_names = [var_names(a) for a in self._axioms_cache]
+            self._slice_cache.clear()
+            self._axioms_revision = self.u.revision
+
+    @property
+    def axioms(self) -> list[z3.BoolRef]:
+        self._refresh_axioms()
+        return self._axioms_cache
+
+    def population(self, ep: EncodedPolicy, i: int) -> z3.BoolRef:
+        """The population rule i targets: ∃context. match_i — the users the rule can decide for in some context.
+
+        Unlike the structural people condition this includes populations defined by expressions
+        (``user.department == 'Contractor'``, ``user.isMemberOf(...)``).
+        """
+        key = (ep.policy.id, i)
+        cached = self._population_cache.get(key)
+        if cached is None:
+            cached = project(ep.match[i], self.u.context_vars(), self.axioms_for(ep.match[i]))
+            self._population_cache[key] = cached
+        return cached
+
     def axioms_for(self, *fs: z3.BoolRef) -> list[z3.BoolRef]:
         """The axioms connected (transitively, through shared variables) to the formulas.
 
         Axioms about variables the formulas never touch cannot change their satisfiability or their
         projections, so dropping them is exact; it keeps solver problems small on large tenants.
         """
+        self._refresh_axioms()
         names: set[str] = set()
         for f in fs:
             names |= var_names(f)
@@ -326,7 +356,10 @@ class Analyzer:
         self._queries += 1
         s = z3.Solver()
         s.add(*self.axioms_for(*fs), *fs)
-        return s.check() == z3.sat
+        r = s.check()
+        if r == z3.unknown:
+            raise RuntimeError("solver returned unknown; refusing to report a partial result")
+        return r == z3.sat
 
     def model(self, *fs: z3.BoolRef) -> z3.ModelRef | None:
         self._queries += 1
@@ -342,6 +375,7 @@ class Analyzer:
         )
         if not dnf.complete:
             dnf = self._coarse_who(f, ax, dnf)
+        dnf.kind = "who"
         return dnf
 
     def _coarse_who(self, f: z3.BoolRef, ax: list[z3.BoolRef], fine: DNF) -> DNF:
@@ -368,9 +402,11 @@ class Analyzer:
     def when(self, f: z3.BoolRef, *, limit: int | None = None) -> DNF:
         self._queries += 1
         ax = self.axioms_for(f)
-        return prime_implicants(
+        dnf = prime_implicants(
             project(f, self.u.who_vars(), ax), self.u.context_vars(), ax, limit=limit or self.opt.dnf_limit
         )
+        dnf.kind = "when"
+        return dnf
 
     def cubes(self, f: z3.BoolRef, *, limit: int | None = None) -> DNF:
         self._queries += 1
@@ -379,7 +415,12 @@ class Analyzer:
         )
 
     def lines(self, dnf: DNF) -> list[str]:
-        return [line[2:] for line in describe_dnf(dnf, self.u.literal_text, bullet="• ")]
+        return [
+            line[2:]
+            for line in describe_dnf(
+                dnf, self.u.literal_text, bullet="• ", kind=getattr(dnf, "kind", "joint")
+            )
+        ]
 
     def witness_text(self, f: z3.BoolRef) -> str | None:
         """A minimal readable witness: the smallest prime implicant, plus one concrete completion."""
@@ -620,6 +661,7 @@ class Analyzer:
             rules.append(analysis)
         self._deny_bypass_findings(ep, rules, labels)
         self._downgrade_findings(ep, rules, labels)
+        self._inactive_rule_findings(ep, labels)
         self._weak_default_finding(ep, rules, labels)
         self._lint_rules(ep, labels)
         outcomes, weakest, weakest_witness = self._outcomes(ep, rules)
@@ -697,7 +739,11 @@ class Analyzer:
             eff_without_i = z3.And(ep.match[j], z3.Not(z3.Or(*between))) if between else ep.match[j]
             differing.append(eff_without_i)
         no_later = z3.Not(z3.Or(*[ep.match[j] for j in later]))
-        differing.append(no_later)  # falling off the end would be a different (deny) outcome
+        act = ep.rules[i].action
+        if not (isinstance(act, AccessAction) and act.access == Access.DENY):
+            differing.append(
+                no_later
+            )  # falling off the end is DENY: a different outcome unless rule i denies too
         return not self.sat(ep.effective[i], z3.Or(*differing))
 
     def _deny_bypass_findings(self, ep: EncodedPolicy, rules: list[RuleAnalysis], labels: list[str]) -> None:
@@ -713,7 +759,7 @@ class Analyzer:
             if ra.assurance.access != Access.DENY or ra.rule.system:
                 continue
             i = ra.index
-            people_d = self.enc.people(ra.rule)
+            people_d = self.population(ep, i)
             context_deny = not self.sat(
                 z3.Not(people_d)
             )  # the DENY targets everyone (risk/zone/device based)
@@ -724,7 +770,7 @@ class Analyzer:
                 if not self.sat(ep.match[i], ep.effective[j]):
                     continue  # no overlap at all
                 # carve-out: the ALLOW is about a sub-population of the DENY's population
-                if not context_deny and not self.sat(self.enc.people(ep.rules[j]), z3.Not(people_d)):
+                if not context_deny and not self.sat(self.population(ep, j), z3.Not(people_d)):
                     continue
                 culprits.append(j)
             if not culprits:
@@ -758,7 +804,7 @@ class Analyzer:
         for i, stricter in enumerate(rules):
             if not stricter.reachable or stricter.assurance.access != Access.ALLOW:
                 continue
-            people_i = self.enc.people(stricter.rule)
+            people_i = self.population(ep, i)
             if not self.sat(z3.Not(people_i)):
                 continue  # rule targets everyone: nothing population-specific to downgrade
             for j in range(i + 1, len(rules)):
@@ -792,6 +838,43 @@ class Analyzer:
                         },
                     )
                 )
+
+    def _inactive_rule_findings(self, ep: EncodedPolicy, labels: list[str]) -> None:
+        """An INACTIVE rule that would decide for someone if re-activated (with a different outcome than today)."""
+        active_ids = {r.id for r in ep.rules}
+        for rule in ep.policy.rules:
+            if rule.is_active or rule.id in active_ids or rule.system:
+                continue
+            earlier = [
+                ep.match[i]
+                for i, r in enumerate(ep.rules)
+                if (r.priority, r.name) < (rule.priority, rule.name)
+            ]
+            would = z3.And(self.enc.match(rule), z3.Not(z3.Or(*earlier))) if earlier else self.enc.match(rule)
+            if not self.sat(would):
+                continue
+            ra = classify_rule(rule, self.catalogue)
+            # does re-enabling change any outcome? (a later rule with the same action signature would give the same result)
+            same_sig = [
+                ep.effective[i]
+                for i, r in enumerate(ep.rules)
+                if _action_signature(r) == _action_signature(rule)
+            ]
+            changes = self.sat(would, z3.Not(z3.Or(*same_sig))) if same_sig else True
+            self.add(
+                Finding(
+                    "MEDIUM" if changes else "INFO",
+                    "inactive-rule-would-apply",
+                    f"Inactive rule {rule.name!r} would decide for some users if re-activated ({ra.label})",
+                    "The rule is INACTIVE and not evaluated today. Re-activating it would change the outcome for the population below."
+                    if changes
+                    else "The rule is INACTIVE; re-activating it would not change any outcome (a later rule acts identically).",
+                    policy=ep.policy.name,
+                    rule=rule.name,
+                    apps=labels,
+                    who=self.lines(self.who(would)) if changes else [],
+                )
+            )
 
     def _weak_default_finding(self, ep: EncodedPolicy, rules: list[RuleAnalysis], labels: list[str]) -> None:
         for ra in rules:
@@ -948,12 +1031,28 @@ class Analyzer:
         ra.enrollment_gap_who = who
         ra.enrollment_gap_witness = self.witness_text(gap)
         needed = sorted({k for p in ra.assurance.paths for k in p.authenticator_keys})
+        blockers: list[str] = []
+        for mep in self._enroll:
+            if not mep.policy.authenticator_settings or not self.sat(gap, mep.selected):
+                continue
+            settings = {s_.key: s_.enroll_self for s_ in mep.policy.authenticator_settings}
+            blocked = sorted(
+                k for k in needed if settings.get(k, EnrollStatus.NOT_ALLOWED) == EnrollStatus.NOT_ALLOWED
+            )
+            blockers.append(
+                f"under enrollment policy {mep.policy.name!r} these users cannot enroll {blocked}"
+            )
         self.add(
             Finding(
                 "HIGH",
                 "unenrollable-requirement",
                 f"Rule {ra.rule.name!r} requires authenticators some matched users cannot enroll",
-                f"The rule allows access only with authenticator sets drawn from {needed}, but the enrollment policy that applies to the users below allows no such set. These users are effectively locked out of the app(s).",
+                "Every authenticator set the rule accepts ("
+                + "; ".join(p.describe() for p in ra.assurance.paths[:4])
+                + (", …" if len(ra.assurance.paths) > 4 else "")
+                + ") needs something the users below cannot enroll: "
+                + ("; ".join(blockers) if blockers else "their enrollment policy allows no such set")
+                + ". These users are effectively locked out of the app(s).",
                 policy=ep.policy.name,
                 rule=ra.rule.name,
                 apps=labels,
@@ -1004,11 +1103,11 @@ class Analyzer:
             f = z3.Or(*[ep.effective[ra.index] for ra in ras])
             dnf = self.who(f)
             rows.append(OutcomeRow(strength, [ra.rule for ra in ras], self.lines(dnf), dnf.complete))
-            if weakest is None and strength > Strength.DENY:
+            if weakest is None and strength > Strength.NO_PATH:
                 weakest = strength
                 weakest_witness = self.witness_text(f)
         if weakest is None:
-            weakest = Strength.DENY if by_strength else Strength.DENY
+            weakest = Strength.NO_PATH if Strength.NO_PATH in by_strength else Strength.DENY
         return rows, weakest, weakest_witness
 
     def _combined(

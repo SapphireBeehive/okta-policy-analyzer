@@ -123,8 +123,12 @@ class ValidationReport:
     mismatches: list[Mismatch]
 
     @property
+    def inconclusive(self) -> bool:
+        return self.compared == 0
+
+    @property
     def ok(self) -> bool:
-        return not self.mismatches
+        return not self.mismatches and not self.inconclusive
 
 
 def validate_app(

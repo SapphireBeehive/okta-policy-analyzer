@@ -162,6 +162,8 @@ class Interpreter:
                 return False
         if s.os_expression and not w.opaque.get(f"os version {s.os_expression}", False):
             return False
+        if s.os_version and not w.opaque.get(f"os version {s.os_version}", False):
+            return False
         return True
 
     # ------------------------------------------------------------------------------ policies

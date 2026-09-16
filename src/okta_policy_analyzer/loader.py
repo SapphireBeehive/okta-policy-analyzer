@@ -19,6 +19,7 @@ from .model import (
     AuthenticatorMethod,
     AuthenticatorSetting,
     Chain,
+    ChainItem,
     ChainStep,
     Constraint,
     ConstraintSet,
@@ -188,6 +189,10 @@ class TenantLoader:
                 status=_status(a.get("status")),
                 methods=methods,
                 allowed_for=str(((a.get("settings") or {}).get("allowedFor")) or "any"),
+                user_verification_required=str(
+                    ((a.get("settings") or {}).get("userVerification")) or ""
+                ).upper()
+                == "REQUIRED",
             )
             t.authenticators[auth.key] = auth
         for ut in self.snap.user_types:
@@ -358,7 +363,7 @@ class TenantLoader:
 
     def _rule(self, r: dict[str, Any], ptype: PolicyType, policy_id: str) -> Rule:
         cond_raw = r.get("conditions") or {}
-        conditions = self._conditions(cond_raw, r)
+        conditions = self._conditions(cond_raw, r, ptype)
         actions = r.get("actions") or {}
         action: Any
         if ptype == PolicyType.ACCESS_POLICY:
@@ -382,7 +387,9 @@ class TenantLoader:
             raw=r,
         )
 
-    def _conditions(self, c: dict[str, Any], r: dict[str, Any]) -> RuleConditions:
+    def _conditions(
+        self, c: dict[str, Any], r: dict[str, Any], ptype: PolicyType = PolicyType.ACCESS_POLICY
+    ) -> RuleConditions:
         rc = RuleConditions()
         people = c.get("people")
         if people:
@@ -396,22 +403,51 @@ class TenantLoader:
             )
             rc.people = None if pc.is_trivial() else pc
         net = c.get("network")
-        if net and (net.get("connection") or "ANYWHERE").upper() != "ANYWHERE":
-            rc.network = NetworkCondition(
-                connection="ZONE",
-                include=list(net.get("include") or []),
-                exclude=list(net.get("exclude") or []),
-            )
+        if net:
+            conn = str(
+                net.get("connection")
+                or ("ZONE" if (net.get("include") or net.get("exclude")) else "ANYWHERE")
+            ).upper()
+            if conn == "ZONE":
+                rc.network = NetworkCondition(
+                    connection="ZONE",
+                    include=list(net.get("include") or []),
+                    exclude=list(net.get("exclude") or []),
+                )
+                if not rc.network.include and not rc.network.exclude:
+                    self.warn(
+                        f"rule {r.get('name')!r}: network connection ZONE without zones; treated as anywhere"
+                    )
+                    rc.network = None
+            elif conn != "ANYWHERE":
+                rc.unsupported["network"] = net
+                self.warn(
+                    f"rule {r.get('name')!r}: unsupported network connection {conn!r} (Classic); treated as anywhere"
+                )
         dev = c.get("device")
         if dev:
+            classic = {k: dev[k] for k in ("platform", "trustLevel", "rooted", "migrated") if k in dev}
+            if classic and ptype == PolicyType.ACCESS_POLICY:
+                # Classic DevicePolicyRuleCondition keys are not evaluated by Identity Engine authentication policies
+                for k, v in classic.items():
+                    rc.unsupported[f"device.{k}"] = v
+                self.warn(
+                    f"rule {r.get('name')!r}: Classic device keys {sorted(classic)} are not evaluated by Identity Engine; ignored"
+                )
             plat = dev.get("platform") or {}
-            types = [p for p in (_platform(x) for x in (plat.get("types") or [])) if p]
+            types = (
+                []
+                if ptype == PolicyType.ACCESS_POLICY
+                else [p for p in (_platform(x) for x in (plat.get("types") or [])) if p]
+            )
             dc = DeviceCondition(
                 registered=dev.get("registered"),
                 managed=dev.get("managed"),
                 assurance_include=list(((dev.get("assurance") or {}).get("include")) or []),
                 platform_types=types,
-                mdm_frameworks=list(plat.get("supportedMDMFrameworks") or []),
+                mdm_frameworks=[]
+                if ptype == PolicyType.ACCESS_POLICY
+                else list(plat.get("supportedMDMFrameworks") or []),
             )
             if (
                 dc.registered is not None
@@ -450,6 +486,9 @@ class TenantLoader:
                 err = str(e)
                 self.warn(f"rule {r.get('name')!r}: unparsable elCondition; treated as opaque: {e}")
             rc.el = ElCondition(text=text, ast=ast, parse_error=err)
+        risk_c = c.get("risk")
+        if isinstance(risk_c, dict) and risk_c.get("behaviors"):
+            rc.behaviors = [str(b) for b in risk_c["behaviors"]]
         ac = c.get("authContext")
         if ac and str(ac.get("authType", "ANY")).upper() != "ANY":
             rc.auth_type = str(ac["authType"]).upper()
@@ -575,6 +614,14 @@ class TenantLoader:
                             self.warn(
                                 f"rule {r.name!r} in {pol.name!r} references missing device assurance policy {did}"
                             )
+        for pol in t.all_policies():
+            for r in pol.rules:
+                if r.conditions.user_type:
+                    for tid in [*r.conditions.user_type.include, *r.conditions.user_type.exclude]:
+                        if tid not in t.user_types:
+                            self.warn(
+                                f"rule {r.name!r} in {pol.name!r} references user type {tid} that is not in the snapshot (treated as matching nobody)"
+                            )
         for app in t.apps.values():
             if app.access_policy_id and t.policy(app.access_policy_id) is None:
                 self.warn(f"app {app.label!r} maps to missing authentication policy {app.access_policy_id}")
@@ -615,6 +662,7 @@ _CONSTRAINT_KEYS = {
     "phishingresistant",
     "userpresence",
     "userverification",
+    "userverificationmethods",
 }
 
 
@@ -640,6 +688,7 @@ def _constraint(kind: str, c: dict[str, Any] | None) -> Constraint | None:
         methods=[str(x).upper() for x in norm.get("methods") or []],
         authentication_methods=_pairs(_as_list(norm.get("authenticationmethods"))),
         excluded_authentication_methods=excluded,
+        user_verification_methods=[str(x).upper() for x in norm.get("userverificationmethods") or []],
         required=bool(required),
         reauthenticate_in=norm.get("reauthenticatein"),
         device_bound=_requirement(norm.get("devicebound"), Requirement.OPTIONAL),
@@ -654,9 +703,23 @@ def _chain(ch: dict[str, Any]) -> Chain:
     steps: list[ChainStep] = []
     node: dict[str, Any] | None = ch
     while node:
+        raw_items = [
+            i for i in (node.get("authenticationMethods") or []) if isinstance(i, dict) and i.get("key")
+        ]
+        items = [
+            ChainItem(
+                key=str(i["key"]),
+                method=i.get("method"),
+                phishing_resistant=_requirement(i.get("phishingResistant"), Requirement.OPTIONAL),
+                hardware_protection=_requirement(i.get("hardwareProtection"), Requirement.OPTIONAL),
+                user_verification=_requirement(i.get("userVerification"), Requirement.OPTIONAL),
+            )
+            for i in raw_items
+        ]
         steps.append(
             ChainStep(
-                authentication_methods=_pairs(node.get("authenticationMethods")),
+                authentication_methods=[(it.key, it.method) for it in items],
+                items=items,
                 reauthenticate_in=node.get("reauthenticateIn"),
             )
         )
@@ -667,17 +730,25 @@ def _chain(ch: dict[str, Any]) -> Chain:
 
 def _platform_spec(x: dict[str, Any]) -> PlatformSpec:
     os_ = x.get("os") or {}
+    ver = os_.get("version")
+    os_version = (
+        f"{ver.get('matchType', '')}:{ver.get('value', '')}" if isinstance(ver, dict) and ver else None
+    )
     return PlatformSpec(
         type=str(x.get("type") or "ANY").upper(),
         os_type=(str(os_["type"]).upper() if os_.get("type") else None),
         os_expression=os_.get("expression"),
+        os_version=os_version,
     )
 
 
 def _platform_is_trivial(pc: PlatformCondition) -> bool:
     if pc.exclude:
         return False
-    return all(s.type == "ANY" and (s.os_type in (None, "ANY")) for s in pc.include)
+    return all(
+        s.type == "ANY" and (s.os_type in (None, "ANY")) and not s.os_expression and not s.os_version
+        for s in pc.include
+    )
 
 
 def _zone_summary(z: dict[str, Any]) -> str:

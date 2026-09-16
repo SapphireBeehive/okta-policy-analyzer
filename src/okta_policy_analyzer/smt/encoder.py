@@ -168,6 +168,8 @@ class PolicyEncoder:
                 parts.append(u.platform_in([p for p in PLATFORMS if p.value == mapped]))
         if s.os_expression:
             parts.append(u.opaque(f"os version {s.os_expression}"))
+        if s.os_version:
+            parts.append(u.opaque(f"os version {s.os_version}"))
         return z3.And(*parts) if parts else z3.BoolVal(True)
 
     # ------------------------------------------------------------------------------ policies

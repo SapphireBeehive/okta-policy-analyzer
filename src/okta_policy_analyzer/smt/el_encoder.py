@@ -275,6 +275,7 @@ class ELEncoder:
             # a group referenced only inside an expression: register it as an empty (deleted) group
             u.group_ids.append(gid)
             u.member[gid] = z3.Bool(f"member[{gid}]")
+            u.revision += 1
             if gid not in u.tenant.groups:
                 u._axioms.append(z3.Not(u.member[gid]))
         return u.member[gid]

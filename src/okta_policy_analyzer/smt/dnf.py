@@ -71,7 +71,7 @@ def project(
     if not elim:
         return z3.simplify(body)
     q = z3.Exists(elim, body)
-    for tactic in ("qe2", "qe", "qe_lite"):
+    for tactic in ("qe2", "qe", "qe-light"):
         try:
             goal = z3.Tactic(tactic)(q)
             expr = goal.as_expr()
@@ -156,11 +156,21 @@ def prime_implicants(
     # specific users) first so that cubes are preferably expressed in terms of groups and context.
     relevant.sort(key=_drop_priority)
     result = DNF()
-    if enum.check() != z3.sat:
+    first = enum.check()
+    if first == z3.unknown:
+        raise RuntimeError(
+            "solver returned unknown while enumerating implicants; refusing to report a partial proof"
+        )
+    if first == z3.unsat:
         result.unsat = True
         return result
     # does the formula hold under the axioms alone?
-    if checker.check() == z3.unsat:
+    triv = checker.check()
+    if triv == z3.unknown:
+        raise RuntimeError(
+            "solver returned unknown while checking tautology; refusing to report a partial proof"
+        )
+    if triv == z3.unsat:
         result.trivially_true = True
         return result
     count = 0
@@ -287,11 +297,15 @@ def describe_cube(cube: Cube, namer) -> str:  # noqa: ANN001 - callable(var, val
     return " ∧ ".join(namer(lit.var, lit.value, lit.positive) for lit in cube.lits)
 
 
-def describe_dnf(dnf: DNF, namer, *, bullet: str = "• ") -> list[str]:  # noqa: ANN001
+def describe_dnf(dnf: DNF, namer, *, bullet: str = "• ", kind: str = "joint") -> list[str]:  # noqa: ANN001
+    """``kind`` says what was projected away: 'who' (context eliminated), 'when' (users eliminated) or 'joint'."""
     if dnf.unsat:
         return [f"{bullet}nobody (unsatisfiable)"]
     if dnf.trivially_true:
-        return [f"{bullet}everyone, in every context"]
+        text = {"who": "everyone (in some context)", "when": "any context (for some user)"}.get(
+            kind, "everyone, in every context"
+        )
+        return [f"{bullet}{text}"]
     lines = [bullet + describe_cube(c, namer) for c in merge_enum_values(dnf.cubes)]
     if dnf.coarse:
         lines.append(

@@ -437,9 +437,12 @@ def render_console(
             console.print(f"  - {a_}")
 
 
-def render_sarif(result: AnalysisResult) -> str:
-    """SARIF 2.1.0 for code-scanning integrations (one result per finding; locations point at the snapshot)."""
+def render_sarif(result: AnalysisResult, *, snapshot_uri: str = "okta-snapshot/policies.json") -> str:
+    """SARIF 2.1.0 for code-scanning integrations (one result per finding; locations point at the snapshot's policies file)."""
+    import hashlib
     import json
+
+    uri = snapshot_uri if snapshot_uri.endswith(".json") else snapshot_uri.rstrip("/") + "/policies.json"
 
     level = {"HIGH": "error", "MEDIUM": "warning", "LOW": "note", "INFO": "note"}
     rules: dict[str, dict] = {}
@@ -458,11 +461,25 @@ def render_sarif(result: AnalysisResult) -> str:
             message += "\nWho: " + "; ".join(f.who)
         if f.witness:
             message += "\nWitness: " + f.witness
+        fingerprint = hashlib.sha1(f"{f.kind}|{f.policy}|{f.rule}|{f.title}".encode()).hexdigest()[:16]
         results.append(
             {
                 "ruleId": f.kind,
                 "level": level.get(f.severity, "note"),
                 "message": {"text": message},
+                "locations": [
+                    {
+                        "physicalLocation": {"artifactLocation": {"uri": uri}},
+                        "logicalLocations": [
+                            {
+                                "name": f.rule or f.policy or f.kind,
+                                "fullyQualifiedName": f"{f.policy or ''}/{f.rule or ''}".strip("/"),
+                                "kind": "rule" if f.rule else "policy",
+                            }
+                        ],
+                    }
+                ],
+                "partialFingerprints": {"primaryLocationLineHash": fingerprint},
                 "properties": {
                     "severity": f.severity,
                     "policy": f.policy,

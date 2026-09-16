@@ -158,6 +158,7 @@ class Authenticator:
     allowed_for: str = (
         "any"  # settings.allowedFor: any | sso | recovery | none (email/phone/security question)
     )
+    user_verification_required: bool = False  # settings.userVerification == REQUIRED (Okta Verify / WebAuthn)
 
     def usable_for_sign_in(self) -> bool:
         return self.status == Status.ACTIVE and self.allowed_for.lower() not in ("none", "recovery")
@@ -231,6 +232,7 @@ class PlatformSpec:
     type: str  # ANY | DESKTOP | MOBILE | OTHER
     os_type: str | None = None  # ANDROID IOS OSX WINDOWS CHROMEOS OTHER ANY ...
     os_expression: str | None = None
+    os_version: str | None = None  # "matchType:value", opaque
 
 
 @dataclass
@@ -290,6 +292,7 @@ class Constraint:
     methods: list[str] = field(default_factory=list)  # PASSWORD ... WEBAUTHN DUO IDP CERT
     authentication_methods: list[tuple[str, str | None]] = field(default_factory=list)  # (key, method)
     excluded_authentication_methods: list[tuple[str, str | None]] = field(default_factory=list)
+    user_verification_methods: list[str] = field(default_factory=list)  # e.g. ["BIOMETRICS"]
     required: bool = True
     reauthenticate_in: str | None = None
     # possession only
@@ -309,8 +312,18 @@ class ConstraintSet:
 
 
 @dataclass
+class ChainItem:
+    key: str
+    method: str | None = None
+    phishing_resistant: Requirement = Requirement.OPTIONAL
+    hardware_protection: Requirement = Requirement.OPTIONAL
+    user_verification: Requirement = Requirement.OPTIONAL
+
+
+@dataclass
 class ChainStep:
     authentication_methods: list[tuple[str, str | None]] = field(default_factory=list)
+    items: list[ChainItem] = field(default_factory=list)  # same entries with their qualifiers
     reauthenticate_in: str | None = None
 
 
