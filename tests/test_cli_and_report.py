@@ -154,6 +154,7 @@ def test_all_subcommands_registered() -> None:
         "fetch",
         "analyze",
         "verify",
+        "check",
         "explain",
         "who",
         "export-tla",
@@ -162,6 +163,10 @@ def test_all_subcommands_registered() -> None:
     }
     ns = parser.parse_args(["simulate-validate", "snap", "--app", "X", "--samples", "3"])
     assert ns.samples == 3 and ns.func.__name__ == "cmd_simulate_validate"
+    ns = parser.parse_args(
+        ["check", "snap", "Nobody can access any app with only a password", "--yaml-out", "x.yaml"]
+    )
+    assert ns.func.__name__ == "cmd_check" and ns.yaml_out == "x.yaml" and len(ns.sentences) == 1
     ns = parser.parse_args(["diff", "a", "b", "--fail-on-more-permissive"])
     assert ns.func.__name__ == "cmd_diff"
     ns = parser.parse_args(["analyze", "snap", "-j", "4", "--no-cubes", "--combined-who"])

@@ -135,6 +135,48 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return cmd_analyze(args)
 
 
+def cmd_check(args: argparse.Namespace) -> int:
+    """Plain-English invariants → proof or counterexample. Exit 0 all proved, 1 violated, 2 unparseable."""
+    import json
+
+    import yaml
+
+    from .invariants import _assertion_dict, check_invariants, explain_result
+
+    sentences: list[str] = list(args.sentences or [])
+    if args.file:
+        for raw in Path(args.file).read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if line and not line.startswith("#"):
+                sentences.append(line)
+    if not sentences:
+        raise ValueError("no invariants given: pass sentences as arguments or --file FILE (one per line)")
+    an = _analyzer(args)
+    results = check_invariants(an, sentences)
+    if args.yaml_out:
+        doc = {
+            "assertions": [
+                _assertion_dict(r.parsed.assertion) for r in results if r.parsed.assertion is not None
+            ]
+        }
+        Path(args.yaml_out).write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+        print(f"assertions written to {args.yaml_out}", file=sys.stderr)
+    if args.format == "json":
+        _emit(json.dumps([r.to_dict() for r in results], indent=2, default=str), args.output)
+    else:
+        blocks = ["\n".join(explain_result(r, an.t)) for r in results]
+        counts = {
+            v: sum(1 for r in results if r.verdict == v)
+            for v in ("PROVED", "VIOLATED", "VACUOUS", "UNPARSED", "ERROR")
+        }
+        summary = "summary: " + ", ".join(f"{n} {v.lower()}" for v, n in counts.items() if n)
+        _emit("\n\n".join(blocks) + "\n\n" + summary, args.output)
+    verdicts = {r.verdict for r in results}
+    if verdicts & {"UNPARSED", "ERROR"}:
+        return 2
+    return 1 if "VIOLATED" in verdicts else 0
+
+
 def cmd_explain(args: argparse.Namespace) -> int:
     from .assurance import Catalogue, classify_rule, combined_rule_strength
     from .interpreter import Interpreter, World, world_from_user
@@ -571,6 +613,20 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--format", choices=["text", "markdown", "json"], default="text")
     v.add_argument("-o", "--output")
     v.set_defaults(func=cmd_verify)
+
+    c = sub.add_parser(
+        "check",
+        help="prove or refute plain-English invariants (exit 1 on violation, 2 if a sentence cannot be read)",
+    )
+    c.add_argument("snapshot", help="snapshot directory or file")
+    c.add_argument("sentences", nargs="*", help="invariants in controlled English (see docs/invariants.md)")
+    c.add_argument("--file", help="file with one invariant per line (# comments allowed)")
+    c.add_argument("--yaml-out", help="also write the formal assertions as YAML for `verify --assertions`")
+    c.add_argument("--format", choices=["text", "json"], default="text")
+    c.add_argument("-o", "--output")
+    c.add_argument("--authenticator-overrides", help="authenticator characteristics overrides (YAML)")
+    c.add_argument("-v", "--verbose", dest="verbose_sub", action="store_true")
+    c.set_defaults(func=cmd_check)
 
     e = sub.add_parser("explain", help="evaluate one concrete user/context with the reference interpreter")
     e.add_argument("snapshot")

@@ -7,8 +7,9 @@ risk levels symbolically, and uses the **z3 SMT solver** to answer, exactly and 
 > **Who can do what form of authentication, for which app?**
 
 It also finds policy bugs (shadowed and dead rules, DENY rules pre-empted by earlier ALLOW rules, weak catch-all
-rules, requirements no enrollable authenticator can satisfy), checks assertions you write, and can export the
-same model to **TLA+** for TLC as an independent second backend.
+rules, requirements no enrollable authenticator can satisfy), **proves or refutes invariants you state in plain
+English** ("Contractors can only reach Salesforce from the Corporate Network or VPN"), checks YAML assertions,
+and can export the same model to **TLA+** for TLC as an independent second backend.
 
 ```
 $ okta-policy-analyzer analyze tests/fixtures/acme
@@ -87,7 +88,12 @@ okta-policy-analyzer analyze snapshots/acme --format markdown -o report.md --ass
 okta-policy-analyzer analyze snapshots/acme --format json --fail-on-high                 # CI gate
 okta-policy-analyzer analyze snapshots/acme --format sarif -o okta.sarif                 # GitHub code scanning
 
-# 3. Verify assertions (exit code 1 on violation)
+# 3. Prove or refute plain-English invariants (exit 1 on a counterexample, 2 if a sentence cannot be read)
+okta-policy-analyzer check snapshots/acme "Okta Administrators must use phishing-resistant MFA for the Okta Admin Console" \
+                                         "Nobody can access any app with only a password"
+okta-policy-analyzer check snapshots/acme --file corpsec-invariants.txt --yaml-out policy-assertions.yaml
+
+# 3b. Verify YAML assertions (exit code 1 on violation)
 okta-policy-analyzer verify snapshots/acme --assertions policy-assertions.yaml
 
 # 4. Ask targeted questions
@@ -111,6 +117,35 @@ okta-policy-analyzer analyze snapshots/acme -j 4 --no-cubes
 Read-only OAuth scopes for a full snapshot: `okta.policies.read okta.apps.read okta.groups.read
 okta.networkZones.read okta.deviceAssurance.read okta.authenticators.read okta.userTypes.read okta.idps.read`
 (+ `okta.users.read` for `--with-users`). An SSWS token of a read-only or super administrator works too.
+
+## Plain-English invariants
+
+`check` reads a controlled-English sentence, restates it formally (the *reading*), and proves it over every
+user and context or returns a minimal counterexample:
+
+```
+$ okta-policy-analyzer check snapshots/acme "Only Finance can access Payroll (Workday)"
+VIOLATED: Only Finance can access Payroll (Workday)
+  reading: For every user who is not a member of Finance, in every context (any network, device, platform,
+           risk level), accessing Payroll (Workday): the deciding rule is DENY (or no rule matches).
+  note: 'only <group> can …' read as: everyone who is not in that group is denied
+  Payroll policy: VIOLATED by rule 'Executives' → 2FA (any factor types)
+    counterexample: member of Executives ∧ not member of Finance  (e.g. groups={Contractors, Executives}, ...)
+```
+
+Subjects (`Everyone`, `Nobody`, `<Group>`, `users who are not in <Group>`, `Only <Group> can`, `users whose
+department is Finance`), contexts (`from <Zone>`, `from outside <Zone> or <Zone>`, `unless they are on <Zone>`,
+`on an unmanaged device`, `on macOS`, `at high risk`), objects (`<App>`, `any app`, `apps governed by <Policy>`)
+and requirements (`must be denied`, `cannot access`, `must use MFA`, `must use phishing-resistant MFA`,
+`cannot … with only a password`, `must not be able to sign in without a password`, `must be handled by rule 'X'`,
+`can only … from <Zone>`) combine freely; the full phrasebook is in [docs/invariants.md](docs/invariants.md).
+Verdicts are **PROVED** (with the modelling assumptions the proof relies on), **VIOLATED** (who, in which
+context, decided by which rule), **VACUOUS** (premise matches nobody) or **UNPARSED** (with the reason and the
+closest supported phrasing or name). `--yaml-out` exports the formal assertions for `verify`.
+
+The repository ships a Claude skill, `.claude/skills/okta-auth-invariants/SKILL.md`, that teaches an agent to
+run this workflow for a security engineer: take a snapshot, orient with `analyze`, turn the question into an
+invariant, confirm the reading, and explain a counterexample using the findings and fix hints.
 
 ## Assertions
 
@@ -201,9 +236,12 @@ src/okta_policy_analyzer/
   analysis.py          analyses and findings
   diff.py              formal snapshot diff
   assertions.py        YAML assertions
+  invariants.py        plain-English invariants -> assertions + formal reading
   interpreter.py       concrete reference interpreter
   tla.py               TLA+ export + TLC runner
   report.py, cli.py
 tests/fixtures/acme    synthetic tenant snapshot exercising every analysis
 docs/semantics.md      Okta semantics relied upon, with sources and assumptions
+docs/invariants.md     controlled-English phrasebook for `check`
+.claude/skills/        Claude skill: investigate auth policies with plain-English invariants
 ```
