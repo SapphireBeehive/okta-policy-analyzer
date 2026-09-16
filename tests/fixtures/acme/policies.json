@@ -1,0 +1,1060 @@
+[
+ {
+  "id": "rst_admin",
+  "name": "Okta Admin Console policy",
+  "type": "ACCESS_POLICY",
+  "priority": 1,
+  "status": "ACTIVE",
+  "system": false,
+  "description": "Okta Admin Console policy (fixture)",
+  "_rules": [
+   {
+    "id": "rul_admin_deny_contractors",
+    "name": "Deny contractors",
+    "priority": 0,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_contractors"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "DENY"
+     }
+    }
+   },
+   {
+    "id": "rul_admin_pr",
+    "name": "Admins phishing-resistant",
+    "priority": 1,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_admins"
+       ]
+      }
+     },
+     "network": {
+      "connection": "ANYWHERE"
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "2FA",
+       "reauthenticateIn": "PT2H",
+       "constraints": [
+        {
+         "possession": {
+          "deviceBound": "OPTIONAL",
+          "hardwareProtection": "OPTIONAL",
+          "phishingResistant": "REQUIRED",
+          "userPresence": "REQUIRED",
+          "userVerification": "REQUIRED",
+          "required": true
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   {
+    "id": "rul_admin_corp",
+    "name": "Admins from corp (2FA)",
+    "priority": 2,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_admins"
+       ]
+      }
+     },
+     "network": {
+      "connection": "ZONE",
+      "include": [
+       "nzo_corp"
+      ]
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "2FA",
+       "reauthenticateIn": "PT2H",
+       "constraints": []
+      }
+     }
+    }
+   },
+   {
+    "id": "rul_admin_breakglass",
+    "name": "Break-glass account",
+    "priority": 3,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "users": {
+       "include": [
+        "00u_breakglass"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "1FA",
+       "reauthenticateIn": "PT12H",
+       "constraints": [
+        {
+         "knowledge": {
+          "types": [
+           "PASSWORD"
+          ],
+          "methods": [
+           "PASSWORD"
+          ],
+          "required": true
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   {
+    "id": "rul_admin_default",
+    "name": "Catch-all Rule",
+    "priority": 99,
+    "status": "ACTIVE",
+    "system": true,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_everyone"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "DENY"
+     }
+    }
+   }
+  ]
+ },
+ {
+  "id": "rst_dashboard",
+  "name": "Okta Dashboard policy",
+  "type": "ACCESS_POLICY",
+  "priority": 2,
+  "status": "ACTIVE",
+  "system": false,
+  "description": "Okta Dashboard policy (fixture)",
+  "_rules": [
+   {
+    "id": "rul_dash_everyone",
+    "name": "Everyone 2FA",
+    "priority": 0,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_everyone"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "2FA",
+       "reauthenticateIn": "PT2H",
+       "constraints": []
+      }
+     }
+    }
+   },
+   {
+    "id": "rul_dash_default",
+    "name": "Catch-all Rule",
+    "priority": 99,
+    "status": "ACTIVE",
+    "system": true,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_everyone"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "2FA",
+       "reauthenticateIn": "PT2H",
+       "constraints": []
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "id": "rst_std",
+  "name": "Standard apps policy",
+  "type": "ACCESS_POLICY",
+  "priority": 3,
+  "status": "ACTIVE",
+  "system": false,
+  "description": "Standard apps policy (fixture)",
+  "_rules": [
+   {
+    "id": "rul_std_svc_deny",
+    "name": "Service accounts denied",
+    "priority": 0,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_svc"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "DENY"
+     }
+    }
+   },
+   {
+    "id": "rul_std_managed",
+    "name": "Managed device passwordless",
+    "priority": 1,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "device": {
+      "registered": true,
+      "managed": true,
+      "assurance": {
+       "include": [
+        "dap_macos_secure",
+        "dap_windows_secure"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "2FA",
+       "reauthenticateIn": "PT43800H",
+       "constraints": [
+        {
+         "possession": {
+          "deviceBound": "REQUIRED",
+          "hardwareProtection": "OPTIONAL",
+          "phishingResistant": "REQUIRED",
+          "userPresence": "REQUIRED",
+          "userVerification": "REQUIRED",
+          "required": true
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   {
+    "id": "rul_std_contractor_corp",
+    "name": "Contractors from corp/VPN",
+    "priority": 2,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_contractors"
+       ]
+      }
+     },
+     "network": {
+      "connection": "ZONE",
+      "include": [
+       "nzo_corp",
+       "nzo_vpn"
+      ]
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "2FA",
+       "reauthenticateIn": "PT2H",
+       "constraints": []
+      }
+     }
+    }
+   },
+   {
+    "id": "rul_std_contractor_deny",
+    "name": "Contractors elsewhere denied",
+    "priority": 3,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_contractors"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "DENY"
+     }
+    }
+   },
+   {
+    "id": "rul_std_high_risk",
+    "name": "High risk denied",
+    "priority": 4,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "riskScore": {
+      "level": "HIGH"
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "DENY"
+     }
+    }
+   },
+   {
+    "id": "rul_std_finance_hw",
+    "name": "Finance hardware-protected",
+    "priority": 5,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_finance"
+       ],
+       "exclude": [
+        "00g_deleted"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "2FA",
+       "reauthenticateIn": "PT2H",
+       "constraints": [
+        {
+         "possession": {
+          "deviceBound": "OPTIONAL",
+          "hardwareProtection": "REQUIRED",
+          "phishingResistant": "REQUIRED",
+          "userPresence": "REQUIRED",
+          "userVerification": "OPTIONAL",
+          "required": true
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   {
+    "id": "rul_std_sales_mobile",
+    "name": "Sales on mobile (custom expression)",
+    "priority": 6,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_sales"
+       ]
+      }
+     },
+     "elCondition": {
+      "condition": "user.department == \"Sales\" && String.stringContains(request.userAgent, \"Mobile\")"
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "1FA",
+       "reauthenticateIn": "PT12H",
+       "constraints": [
+        {
+         "knowledge": {
+          "types": [
+           "PASSWORD"
+          ],
+          "methods": [
+           "PASSWORD"
+          ],
+          "required": true
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   {
+    "id": "rul_std_inactive",
+    "name": "Old rule (inactive)",
+    "priority": 7,
+    "status": "INACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_eng"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "1FA",
+       "reauthenticateIn": "PT12H",
+       "constraints": [
+        {
+         "knowledge": {
+          "types": [
+           "PASSWORD"
+          ],
+          "methods": [
+           "PASSWORD"
+          ],
+          "required": true
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   {
+    "id": "rul_std_default",
+    "name": "Catch-all Rule",
+    "priority": 99,
+    "status": "ACTIVE",
+    "system": true,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_everyone"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "2FA",
+       "reauthenticateIn": "PT2H",
+       "constraints": []
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "id": "rst_payroll",
+  "name": "Payroll policy",
+  "type": "ACCESS_POLICY",
+  "priority": 4,
+  "status": "ACTIVE",
+  "system": false,
+  "description": "Payroll policy (fixture)",
+  "_rules": [
+   {
+    "id": "rul_pay_finance",
+    "name": "Finance phishing-resistant",
+    "priority": 0,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_finance"
+       ],
+       "exclude": [
+        "00g_contractors"
+       ]
+      }
+     },
+     "userType": {
+      "include": [
+       "oty_default"
+      ],
+      "exclude": []
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "2FA",
+       "reauthenticateIn": "PT2H",
+       "constraints": [
+        {
+         "possession": {
+          "deviceBound": "OPTIONAL",
+          "hardwareProtection": "OPTIONAL",
+          "phishingResistant": "REQUIRED",
+          "userPresence": "REQUIRED",
+          "userVerification": "REQUIRED",
+          "required": true
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   {
+    "id": "rul_pay_exec",
+    "name": "Executives",
+    "priority": 1,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_exec"
+       ],
+       "exclude": [
+        "00g_deleted"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "2FA",
+       "reauthenticateIn": "PT2H",
+       "constraints": []
+      }
+     }
+    }
+   },
+   {
+    "id": "rul_pay_default",
+    "name": "Catch-all Rule",
+    "priority": 99,
+    "status": "ACTIVE",
+    "system": true,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_everyone"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "DENY"
+     }
+    }
+   }
+  ]
+ },
+ {
+  "id": "rst_weak",
+  "name": "Legacy intranet policy",
+  "type": "ACCESS_POLICY",
+  "priority": 5,
+  "status": "ACTIVE",
+  "system": false,
+  "description": "Legacy intranet policy (fixture)",
+  "_rules": [
+   {
+    "id": "rul_weak_high_risk",
+    "name": "High risk denied",
+    "priority": 0,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "riskScore": {
+      "level": "HIGH"
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "DENY"
+     }
+    }
+   },
+   {
+    "id": "rul_weak_default",
+    "name": "Catch-all Rule",
+    "priority": 99,
+    "status": "ACTIVE",
+    "system": true,
+    "type": "ACCESS_POLICY",
+    "conditions": {
+     "people": {
+      "groups": {
+       "include": [
+        "00g_everyone"
+       ]
+      }
+     }
+    },
+    "actions": {
+     "appSignOn": {
+      "access": "ALLOW",
+      "verificationMethod": {
+       "type": "ASSURANCE",
+       "factorMode": "1FA",
+       "reauthenticateIn": "PT12H",
+       "constraints": [
+        {
+         "knowledge": {
+          "types": [
+           "PASSWORD"
+          ],
+          "methods": [
+           "PASSWORD"
+          ],
+          "required": true
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  ]
+ },
+ {
+  "id": "gsp_admins",
+  "name": "Admins session policy",
+  "type": "OKTA_SIGN_ON",
+  "priority": 1,
+  "status": "ACTIVE",
+  "system": false,
+  "description": "Admins session policy (fixture)",
+  "_rules": [
+   {
+    "id": "rul_gsp_admin_mfa",
+    "name": "MFA every sign-in",
+    "priority": 0,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "SIGN_ON",
+    "conditions": {
+     "people": {
+      "users": {
+       "exclude": []
+      }
+     },
+     "network": {
+      "connection": "ANYWHERE"
+     },
+     "authContext": {
+      "authType": "ANY"
+     }
+    },
+    "actions": {
+     "signon": {
+      "access": "ALLOW",
+      "requireFactor": true,
+      "primaryFactor": "PASSWORD_IDP",
+      "rememberDeviceByDefault": false,
+      "session": {
+       "maxSessionIdleMinutes": 60,
+       "maxSessionLifetimeMinutes": 480,
+       "usePersistentCookie": false
+      },
+      "factorPromptMode": "ALWAYS"
+     }
+    }
+   }
+  ],
+  "conditions": {
+   "people": {
+    "groups": {
+     "include": [
+      "00g_admins"
+     ]
+    }
+   }
+  }
+ },
+ {
+  "id": "gsp_contractors",
+  "name": "Contractors session policy",
+  "type": "OKTA_SIGN_ON",
+  "priority": 2,
+  "status": "ACTIVE",
+  "system": false,
+  "description": "Contractors session policy (fixture)",
+  "_rules": [
+   {
+    "id": "rul_gsp_ctr_deny",
+    "name": "Deny from high-risk countries",
+    "priority": 0,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "SIGN_ON",
+    "conditions": {
+     "network": {
+      "connection": "ZONE",
+      "include": [
+       "nzo_highrisk"
+      ]
+     }
+    },
+    "actions": {
+     "signon": {
+      "access": "DENY"
+     }
+    }
+   },
+   {
+    "id": "rul_gsp_ctr_mfa",
+    "name": "MFA per session",
+    "priority": 1,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "SIGN_ON",
+    "conditions": {
+     "network": {
+      "connection": "ANYWHERE"
+     }
+    },
+    "actions": {
+     "signon": {
+      "access": "ALLOW",
+      "requireFactor": true,
+      "primaryFactor": "PASSWORD_IDP",
+      "rememberDeviceByDefault": false,
+      "session": {
+       "maxSessionIdleMinutes": 120,
+       "maxSessionLifetimeMinutes": 0,
+       "usePersistentCookie": false
+      },
+      "factorPromptMode": "SESSION",
+      "factorLifetime": 720
+     }
+    }
+   }
+  ],
+  "conditions": {
+   "people": {
+    "groups": {
+     "include": [
+      "00g_contractors"
+     ]
+    }
+   }
+  }
+ },
+ {
+  "id": "gsp_default",
+  "name": "Default Policy",
+  "type": "OKTA_SIGN_ON",
+  "priority": 3,
+  "status": "ACTIVE",
+  "system": true,
+  "description": "Default Policy (fixture)",
+  "_rules": [
+   {
+    "id": "rul_gsp_default",
+    "name": "Default Rule",
+    "priority": 1,
+    "status": "ACTIVE",
+    "system": true,
+    "type": "SIGN_ON",
+    "conditions": {
+     "people": {
+      "users": {
+       "exclude": []
+      }
+     },
+     "network": {
+      "connection": "ANYWHERE"
+     },
+     "authContext": {
+      "authType": "ANY"
+     }
+    },
+    "actions": {
+     "signon": {
+      "access": "ALLOW",
+      "requireFactor": false,
+      "primaryFactor": "PASSWORD_IDP_ANY_FACTOR",
+      "rememberDeviceByDefault": false,
+      "session": {
+       "maxSessionIdleMinutes": 120,
+       "maxSessionLifetimeMinutes": 0,
+       "usePersistentCookie": false
+      }
+     }
+    }
+   }
+  ],
+  "conditions": {
+   "people": {
+    "groups": {
+     "include": [
+      "00g_everyone"
+     ]
+    }
+   }
+  }
+ },
+ {
+  "id": "mfa_finance",
+  "name": "Finance enrollment",
+  "type": "MFA_ENROLL",
+  "priority": 1,
+  "status": "ACTIVE",
+  "system": false,
+  "description": "Finance enrollment (fixture)",
+  "_rules": [
+   {
+    "id": "rul_mfa_fin",
+    "name": "Enroll at sign-in",
+    "priority": 0,
+    "status": "ACTIVE",
+    "system": false,
+    "type": "MFA_ENROLL",
+    "conditions": {
+     "network": {
+      "connection": "ANYWHERE"
+     }
+    },
+    "actions": {
+     "enroll": {
+      "self": "CHALLENGE"
+     }
+    }
+   }
+  ],
+  "conditions": {
+   "people": {
+    "groups": {
+     "include": [
+      "00g_finance"
+     ]
+    }
+   }
+  },
+  "settings": {
+   "type": "AUTHENTICATORS",
+   "authenticators": [
+    {
+     "key": "okta_password",
+     "enroll": {
+      "self": "REQUIRED"
+     }
+    },
+    {
+     "key": "phone_number",
+     "enroll": {
+      "self": "REQUIRED"
+     }
+    },
+    {
+     "key": "okta_email",
+     "enroll": {
+      "self": "OPTIONAL"
+     }
+    },
+    {
+     "key": "security_question",
+     "enroll": {
+      "self": "OPTIONAL"
+     }
+    },
+    {
+     "key": "okta_verify",
+     "enroll": {
+      "self": "NOT_ALLOWED"
+     }
+    },
+    {
+     "key": "webauthn",
+     "enroll": {
+      "self": "NOT_ALLOWED"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "mfa_default",
+  "name": "Default Policy",
+  "type": "MFA_ENROLL",
+  "priority": 2,
+  "status": "ACTIVE",
+  "system": true,
+  "description": "Default Policy (fixture)",
+  "_rules": [
+   {
+    "id": "rul_mfa_default",
+    "name": "Default Rule",
+    "priority": 1,
+    "status": "ACTIVE",
+    "system": true,
+    "type": "MFA_ENROLL",
+    "conditions": {
+     "network": {
+      "connection": "ANYWHERE"
+     }
+    },
+    "actions": {
+     "enroll": {
+      "self": "CHALLENGE"
+     }
+    }
+   }
+  ],
+  "conditions": {
+   "people": {
+    "groups": {
+     "include": [
+      "00g_everyone"
+     ]
+    }
+   }
+  },
+  "settings": {
+   "type": "AUTHENTICATORS",
+   "authenticators": [
+    {
+     "key": "okta_password",
+     "enroll": {
+      "self": "REQUIRED"
+     }
+    },
+    {
+     "key": "okta_verify",
+     "enroll": {
+      "self": "REQUIRED"
+     }
+    },
+    {
+     "key": "webauthn",
+     "enroll": {
+      "self": "OPTIONAL"
+     }
+    },
+    {
+     "key": "phone_number",
+     "enroll": {
+      "self": "OPTIONAL"
+     }
+    },
+    {
+     "key": "okta_email",
+     "enroll": {
+      "self": "OPTIONAL"
+     }
+    },
+    {
+     "key": "google_otp",
+     "enroll": {
+      "self": "OPTIONAL"
+     }
+    }
+   ]
+  }
+ }
+]

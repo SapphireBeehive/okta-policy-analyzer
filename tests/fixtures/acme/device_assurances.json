@@ -1,0 +1,23 @@
+[
+ {
+  "id": "dap_macos_secure",
+  "name": "macOS secure",
+  "platform": "MACOS",
+  "osVersion": {
+   "minimum": "14.0"
+  },
+  "diskEncryptionType": {
+   "include": [
+    "ALL_INTERNAL_VOLUMES"
+   ]
+  }
+ },
+ {
+  "id": "dap_windows_secure",
+  "name": "Windows secure",
+  "platform": "WINDOWS",
+  "osVersion": {
+   "minimum": "10.0.19045"
+  }
+ }
+]

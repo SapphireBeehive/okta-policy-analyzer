@@ -1,0 +1,119 @@
+[
+ {
+  "id": "00g_everyone",
+  "type": "BUILT_IN",
+  "profile": {
+   "name": "Everyone",
+   "description": "Everyone group"
+  },
+  "_embedded": {
+   "stats": {
+    "usersCount": 500
+   }
+  }
+ },
+ {
+  "id": "00g_eng",
+  "type": "OKTA_GROUP",
+  "profile": {
+   "name": "Engineering",
+   "description": "Engineering group"
+  },
+  "_embedded": {
+   "stats": {
+    "usersCount": 120
+   }
+  }
+ },
+ {
+  "id": "00g_admins",
+  "type": "OKTA_GROUP",
+  "profile": {
+   "name": "Okta Administrators",
+   "description": "Okta Administrators group"
+  },
+  "_embedded": {
+   "stats": {
+    "usersCount": 6
+   }
+  }
+ },
+ {
+  "id": "00g_contractors",
+  "type": "OKTA_GROUP",
+  "profile": {
+   "name": "Contractors",
+   "description": "Contractors group"
+  },
+  "_embedded": {
+   "stats": {
+    "usersCount": 40
+   }
+  }
+ },
+ {
+  "id": "00g_sales",
+  "type": "OKTA_GROUP",
+  "profile": {
+   "name": "Sales",
+   "description": "Sales group"
+  },
+  "_embedded": {
+   "stats": {
+    "usersCount": 80
+   }
+  }
+ },
+ {
+  "id": "00g_exec",
+  "type": "OKTA_GROUP",
+  "profile": {
+   "name": "Executives",
+   "description": "Executives group"
+  },
+  "_embedded": {
+   "stats": {
+    "usersCount": 9
+   }
+  }
+ },
+ {
+  "id": "00g_svc",
+  "type": "OKTA_GROUP",
+  "profile": {
+   "name": "Service Accounts",
+   "description": "Service Accounts group"
+  },
+  "_embedded": {
+   "stats": {
+    "usersCount": 15
+   }
+  }
+ },
+ {
+  "id": "00g_finance",
+  "type": "OKTA_GROUP",
+  "profile": {
+   "name": "Finance",
+   "description": "Finance group"
+  },
+  "_embedded": {
+   "stats": {
+    "usersCount": 25
+   }
+  }
+ },
+ {
+  "id": "00g_us",
+  "type": "OKTA_GROUP",
+  "profile": {
+   "name": "US Employees",
+   "description": "US Employees group"
+  },
+  "_embedded": {
+   "stats": {
+    "usersCount": 300
+   }
+  }
+ }
+]

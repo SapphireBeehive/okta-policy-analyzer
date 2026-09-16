@@ -1,0 +1,82 @@
+[
+ {
+  "id": "app_admin",
+  "label": "Okta Admin Console",
+  "name": "okta_admin_console",
+  "status": "ACTIVE",
+  "signOnMode": "OPENID_CONNECT",
+  "_links": {
+   "accessPolicy": {
+    "href": "https://acme.okta.com/api/v1/policies/rst_admin"
+   }
+  }
+ },
+ {
+  "id": "app_dashboard",
+  "label": "Okta Dashboard",
+  "name": "okta_dashboard",
+  "status": "ACTIVE",
+  "signOnMode": "OPENID_CONNECT",
+  "_links": {
+   "accessPolicy": {
+    "href": "https://acme.okta.com/api/v1/policies/rst_dashboard"
+   }
+  }
+ },
+ {
+  "id": "app_salesforce",
+  "label": "Salesforce",
+  "name": "salesforce",
+  "status": "ACTIVE",
+  "signOnMode": "SAML_2_0",
+  "_links": {
+   "accessPolicy": {
+    "href": "https://acme.okta.com/api/v1/policies/rst_std"
+   }
+  }
+ },
+ {
+  "id": "app_github",
+  "label": "GitHub",
+  "name": "github",
+  "status": "ACTIVE",
+  "signOnMode": "SAML_2_0",
+  "_links": {
+   "accessPolicy": {
+    "href": "https://acme.okta.com/api/v1/policies/rst_std"
+   }
+  }
+ },
+ {
+  "id": "app_payroll",
+  "label": "Payroll (Workday)",
+  "name": "payroll_(workday)",
+  "status": "ACTIVE",
+  "signOnMode": "SAML_2_0",
+  "_links": {
+   "accessPolicy": {
+    "href": "https://acme.okta.com/api/v1/policies/rst_payroll"
+   }
+  }
+ },
+ {
+  "id": "app_legacy",
+  "label": "Legacy Intranet",
+  "name": "legacy_intranet",
+  "status": "ACTIVE",
+  "signOnMode": "BROWSER_PLUGIN",
+  "_links": {
+   "accessPolicy": {
+    "href": "https://acme.okta.com/api/v1/policies/rst_weak"
+   }
+  }
+ },
+ {
+  "id": "app_orphan",
+  "label": "Orphan App",
+  "name": "orphan_app",
+  "status": "ACTIVE",
+  "signOnMode": "BOOKMARK",
+  "_links": {}
+ }
+]

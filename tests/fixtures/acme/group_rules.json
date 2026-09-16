@@ -1,0 +1,63 @@
+[
+ {
+  "id": "grr_finance",
+  "name": "Finance by department",
+  "status": "ACTIVE",
+  "conditions": {
+   "expression": {
+    "type": "urn:okta:expression:1.0",
+    "value": "user.department == \"Finance\""
+   }
+  },
+  "actions": {
+   "assignUserToGroups": {
+    "groupIds": [
+     "00g_finance"
+    ]
+   }
+  }
+ },
+ {
+  "id": "grr_us",
+  "name": "US employees",
+  "status": "ACTIVE",
+  "conditions": {
+   "expression": {
+    "type": "urn:okta:expression:1.0",
+    "value": "user.countryCode == \"US\" && !isMemberOfGroup(\"00g_contractors\")"
+   },
+   "people": {
+    "users": {
+     "exclude": [
+      "00u_breakglass"
+     ]
+    }
+   }
+  },
+  "actions": {
+   "assignUserToGroups": {
+    "groupIds": [
+     "00g_us"
+    ]
+   }
+  }
+ },
+ {
+  "id": "grr_inactive",
+  "name": "Old exec rule (inactive)",
+  "status": "INACTIVE",
+  "conditions": {
+   "expression": {
+    "type": "urn:okta:expression:1.0",
+    "value": "user.title == \"CEO\""
+   }
+  },
+  "actions": {
+   "assignUserToGroups": {
+    "groupIds": [
+     "00g_exec"
+    ]
+   }
+  }
+ }
+]
