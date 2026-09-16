@@ -167,8 +167,9 @@ naming the weakest way into any app.
 
 Every statement in a report is a solver query, so run time scales with the number of rules and findings rather
 than with the number of users. Indicative timings on a 4-core machine: the bundled fixture (5 policies, 20 rules)
-in about 4 s; a synthetic tenant with 300 groups, 30 policies and 270 rules in about 7 minutes single-threaded
-(`-j 4` divides that by the number of workers; `--no-cubes` skips the joint who+context enumeration). Axioms are
+in about 4 s; a synthetic tenant with 300 groups, 30 policies and 270 rules in about 95 s single-threaded
+(`-j 4` divides that by the number of workers; `--no-cubes` skips the joint who+context enumeration;
+`--combined-who` adds WHO descriptions for every session-rule × app-rule pair and roughly quadruples the time). Axioms are
 sliced per query to the variables they touch, prime-implicant enumeration is bounded (`--dnf-limit`) with a coarse
 but sound fallback, and the TLA+ export slices the state space per policy.
 
