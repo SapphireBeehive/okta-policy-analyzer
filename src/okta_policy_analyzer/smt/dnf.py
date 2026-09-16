@@ -50,6 +50,8 @@ class DNF:
     complete: bool = True  # False when the enumeration bound was hit
     trivially_true: bool = False
     unsat: bool = False
+    coarse: bool = False  # description over a reduced vocabulary (sound over-approximation of the exact set)
+    fine_count: int = 0  # number of exact cubes found before falling back
 
     def expr(self) -> z3.BoolRef:
         if self.unsat:
@@ -291,6 +293,10 @@ def describe_dnf(dnf: DNF, namer, *, bullet: str = "• ") -> list[str]:  # noqa
     if dnf.trivially_true:
         return [f"{bullet}everyone, in every context"]
     lines = [bullet + describe_cube(c, namer) for c in merge_enum_values(dnf.cubes)]
+    if dnf.coarse:
+        lines.append(
+            f"{bullet}(coarse description over the rule's own groups; the exact enumeration exceeded the bound after {dnf.fine_count} cubes)"
+        )
     if not dnf.complete:
         lines.append(f"{bullet}… (enumeration bound reached; the list above is incomplete)")
     return lines

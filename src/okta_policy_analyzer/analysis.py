@@ -337,9 +337,33 @@ class Analyzer:
     def who(self, f: z3.BoolRef, *, limit: int | None = None) -> DNF:
         self._queries += 1
         ax = self.axioms_for(f)
-        return prime_implicants(
+        dnf = prime_implicants(
             project(f, self.u.context_vars(), ax), self.u.who_vars(), ax, limit=limit or self.opt.dnf_limit
         )
+        if not dnf.complete:
+            dnf = self._coarse_who(f, ax, dnf)
+        return dnf
+
+    def _coarse_who(self, f: z3.BoolRef, ax: list[z3.BoolRef], fine: DNF) -> DNF:
+        """Fallback when the exact WHO enumeration hits its bound: describe the population in a smaller vocabulary.
+
+        Everything but the group-membership variables the formula itself mentions is projected away, which yields
+        the exact set of memberships that *may* obtain the outcome (a sound over-approximation of the fine
+        description) and is usually small. The result is marked ``coarse`` so reports can say so.
+        """
+        names = var_names(f)
+        vocab = [
+            v for v in self.u.who_vars() if v.decl().name().startswith("member[") and v.decl().name() in names
+        ]
+        if not vocab:
+            return fine
+        keep = {v.decl().name() for v in vocab}
+        eliminate = [v for v in self.u.all_vars() if v.decl().name() not in keep]
+        self._queries += 1
+        coarse = prime_implicants(project(f, eliminate, ax), vocab, ax, limit=self.opt.dnf_limit)
+        coarse.coarse = True
+        coarse.fine_count = len(fine.cubes)
+        return coarse
 
     def when(self, f: z3.BoolRef, *, limit: int | None = None) -> DNF:
         self._queries += 1

@@ -234,3 +234,28 @@ def test_group_view_fix_hints_and_executive_line(result: AnalysisResult) -> None
     assert bypass.data["fix_hint"] and bypass.data["fix_hint"].startswith("if ")
     d = result.to_dict()
     assert d["group_view"] and {"group", "policy", "weakest", "strongest", "rule"} <= set(d["group_view"][0])
+
+
+def test_coarse_fallback_when_enumeration_bound_hit(acme: Tenant) -> None:
+    from okta_policy_analyzer.analysis import AnalysisOptions
+
+    an = Analyzer(acme, AnalysisOptions(dnf_limit=1, full_cubes=False))
+    ep = an.enc.access_policy(acme.policy("rst_payroll"))  # type: ignore[arg-type]
+    i = ep.rule_index(
+        "rul_pay_default"
+    )  # its exact WHO has several cubes (user type, contractors, finance, executives)
+    dnf = an.who(ep.effective[i])
+    assert dnf.coarse and dnf.cubes and dnf.fine_count == 1
+    lines = an.lines(dnf)
+    assert any("coarse description" in line for line in lines)
+    # the coarse description mentions only groups the policy's rules reference
+    body = " ".join(lines)
+    assert "Executives" in body and "userType" not in body
+    # and it over-approximates the exact set: every exact cube implies the coarse formula
+    exact = Analyzer(acme, AnalysisOptions(full_cubes=False)).who(ep.effective[i])
+    assert exact.complete and len(exact.cubes) > 1
+    import z3
+
+    s_ = z3.Solver()
+    s_.add(*an.axioms_for(ep.effective[i]), exact.expr(), z3.Not(dnf.expr()))
+    assert s_.check() == z3.unsat
