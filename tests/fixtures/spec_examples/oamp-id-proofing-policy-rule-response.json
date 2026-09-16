@@ -1,0 +1,45 @@
+{
+ "id": "ruleId",
+ "_links": {
+  "self": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/rules/{ruleId}",
+   "hints": {
+    "allow": [
+     "GET",
+     "PUT",
+     "DELETE"
+    ]
+   }
+  },
+  "deactivate": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/rules/{ruleId}/lifecycle/deactivate",
+   "hints": {
+    "allow": [
+     "POST"
+    ]
+   }
+  }
+ },
+ "name": "Account management policy rule",
+ "priority": 1,
+ "status": "ACTIVE",
+ "conditions": {
+  "people": {
+   "users": {
+    "exclude": []
+   }
+  },
+  "network": {
+   "connection": "ANYWHERE"
+  }
+ },
+ "actions": {
+  "appSignOn": {
+   "access": "ALLOW",
+   "verificationMethod": {
+    "id": "entity_id",
+    "type": "ID_PROOFING"
+   }
+  }
+ }
+}

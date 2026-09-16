@@ -1,0 +1,65 @@
+{
+ "type": "SIGN_ON",
+ "name": "Test Sign On",
+ "id": "0prh1sd28q5sXGW08697",
+ "priority": 0,
+ "created": "2024-04-25T17:35:02.000Z",
+ "lastUpdated": "2024-04-25T17:35:02.000Z",
+ "system": false,
+ "status": "ACTIVE",
+ "conditions": {
+  "network": {
+   "connection": "ANYWHERE"
+  },
+  "riskScore": {
+   "level": "ANY"
+  },
+  "identityProvider": {
+   "provider": "ANY"
+  },
+  "authContext": {
+   "authType": "ANY"
+  },
+  "people": {
+   "users": {
+    "exclude": []
+   }
+  }
+ },
+ "actions": {
+  "signon": {
+   "requireFactor": false,
+   "factorPromptMode": "ALWAYS",
+   "factorLifetime": 15,
+   "access": "ALLOW",
+   "session": {
+    "maxSessionIdleMinutes": 720,
+    "maxSessionLifetimeMinutes": 0,
+    "usePersistentCookie": false
+   },
+   "primaryFactor": "PASSWORD_IDP_ANY_FACTOR"
+  }
+ },
+ "_links": {
+  "self": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/rules/{ruleId}",
+   "hints": {
+    "allow": [
+     "GET",
+     "PUT",
+     "DELETE"
+    ]
+   }
+  },
+  "deactivate": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/rules/{ruleId}",
+   "hints": {
+    "allow": [
+     "GET",
+     "PUT",
+     "DELETE"
+    ]
+   }
+  }
+ }
+}

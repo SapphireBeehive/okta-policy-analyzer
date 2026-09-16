@@ -1,0 +1,70 @@
+{
+ "id": "rule8jjozjGMGbHyC1d6",
+ "status": "ACTIVE",
+ "name": "Skip Factor Challenge when On-Prem",
+ "priority": 0,
+ "created": "2024-04-25T17:35:02.000Z",
+ "lastUpdated": "2024-04-25T17:35:02.000Z",
+ "system": false,
+ "conditions": {
+  "network": {
+   "connection": "ZONE",
+   "include": [
+    "00u7yq5goxNFTiMjW1d7"
+   ]
+  },
+  "authContext": {
+   "authType": "ANY"
+  },
+  "people": {
+   "users": {
+    "exclude": []
+   }
+  },
+  "risk": {
+   "behaviors": []
+  },
+  "riskScore": {
+   "level": "ANY"
+  },
+  "identityProvider": {
+   "provider": "ANY"
+  }
+ },
+ "actions": {
+  "signon": {
+   "access": "ALLOW",
+   "requireFactor": false,
+   "primaryFactor": "PASSWORD_IDP_ANY_FACTOR",
+   "rememberDeviceByDefault": false,
+   "session": {
+    "usePersistentCookie": false,
+    "maxSessionIdleMinutes": 720,
+    "maxSessionLifetimeMinutes": 0
+   }
+  }
+ },
+ "type": "SIGN_ON",
+ "_links": {
+  "self": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/rules/{ruleId}",
+   "hints": {
+    "allow": [
+     "GET",
+     "PUT",
+     "DELETE"
+    ]
+   }
+  },
+  "deactivate": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/rules/{ruleId}",
+   "hints": {
+    "allow": [
+     "GET",
+     "PUT",
+     "DELETE"
+    ]
+   }
+  }
+ }
+}

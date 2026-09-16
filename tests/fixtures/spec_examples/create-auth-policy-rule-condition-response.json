@@ -1,0 +1,106 @@
+{
+ "id": "rule8jjozjGMGbHyC1d6",
+ "status": "ACTIVE",
+ "name": "Rule with conditions",
+ "priority": 0,
+ "created": "2024-04-25T17:35:02.000Z",
+ "lastUpdated": "2024-04-25T17:35:02.000Z",
+ "system": false,
+ "conditions": {
+  "people": {
+   "users": {
+    "exclude": [
+     "00u7yq5goxNFTiMjW1d7"
+    ]
+   },
+   "groups": {
+    "include": [
+     "00g9i12jictsYdZdi1d7"
+    ]
+   }
+  },
+  "network": {
+   "connection": "ZONE",
+   "exclude": [
+    "nzo9o4rctwQCJNE6y1d7"
+   ]
+  },
+  "platform": {
+   "include": [
+    {
+     "type": "MOBILE",
+     "os": {
+      "type": "IOS"
+     }
+    },
+    {
+     "type": "MOBILE",
+     "os": {
+      "type": "ANDROID"
+     }
+    },
+    {
+     "type": "DESKTOP",
+     "os": {
+      "type": "MACOS"
+     }
+    }
+   ],
+   "exclude": []
+  },
+  "riskScore": {
+   "level": "ANY"
+  },
+  "userType": {
+   "include": [],
+   "exclude": [
+    "otyezu4m0xN6w5JEa1d7"
+   ]
+  },
+  "elCondition": {
+   "condition": "security.risk.level == 'HIGH'"
+  }
+ },
+ "actions": {
+  "appSignOn": {
+   "access": "ALLOW",
+   "verificationMethod": {
+    "factorMode": "2FA",
+    "type": "ASSURANCE",
+    "reauthenticateIn": "PT2H",
+    "constraints": {
+     "knowledge": {
+      "required": true,
+      "types": [
+       "password"
+      ],
+      "reauthenticateIn": "PT2H"
+     }
+    }
+   }
+  }
+ },
+ "type": "ACCESS_POLICY",
+ "_links": {
+  "self": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/rst7xus97faIAgmti1d7/rules/rul7yut96gmsOzKAA1d6",
+   "hints": {
+    "allow": [
+     "GET",
+     "PUT",
+     "DELETE"
+    ]
+   }
+  },
+  "deactivate": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/rst7xus97faIAgmti1d7/rules/rul7yut96gmsOzKAA1d6",
+   "hints": {
+    "allow": [
+     "GET",
+     "PUT",
+     "DELETE"
+    ]
+   }
+  }
+ }
+}
