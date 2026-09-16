@@ -1,0 +1,56 @@
+# Example assertions for okta-policy-analyzer verify / analyze --assertions.
+# Names of apps, groups and zones are resolved against the snapshot (labels or Okta ids both work).
+assertions:
+  - name: admin-console-phishing-resistant
+    description: Every administrator must use phishing-resistant MFA for the Admin Console (a DENY also satisfies this)
+    apps: ["Okta Admin Console"]
+    when:
+      groups_any: ["Okta Administrators"]
+    expect:
+      min_strength: TWO_FA_PHISHING_RESISTANT
+
+  - name: no-password-only-access-anywhere
+    description: No app may be reachable with a password alone
+    all_apps: true
+    when: {}
+    expect:
+      min_strength: TWO_FA
+
+  - name: contractors-corp-or-vpn-only
+    description: Contractors can only reach line-of-business apps from the corporate network or VPN
+    apps: ["Salesforce", "GitHub"]
+    when:
+      groups_any: ["Contractors"]
+      zones_none: ["Corporate Network", "VPN"]
+    expect:
+      access: DENY
+
+  - name: service-accounts-never-sign-in-interactively
+    apps: ["Salesforce"]
+    when:
+      groups_any: ["Service Accounts"]
+    expect:
+      access: DENY
+
+  - name: high-risk-sessions-are-denied
+    all_apps: true
+    when:
+      risk: HIGH
+    expect:
+      access: DENY
+
+  - name: unmanaged-devices-need-two-factors
+    all_apps: true
+    when:
+      managed: false
+    expect:
+      min_strength: TWO_FA
+
+  - name: payroll-requires-password-plus-factor-even-with-session-policy
+    description: Judge the requirement after the global session policy is taken into account
+    apps: ["Payroll (Workday)"]
+    when: {}
+    expect:
+      min_strength: TWO_FA
+      passwordless: false
+    with_session_policy: true
