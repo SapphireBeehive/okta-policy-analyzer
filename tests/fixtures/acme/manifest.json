@@ -1,0 +1,20 @@
+{
+ "org_url": "https://acme.okta.com",
+ "fetched_at": "2026-01-01T00:00:00+00:00",
+ "tool_version": "fixture",
+ "counts": {
+  "policies": 10,
+  "policy_mappings": 0,
+  "apps": 7,
+  "groups": 9,
+  "group_rules": 3,
+  "zones": 5,
+  "device_assurances": 2,
+  "authenticators": 7,
+  "user_types": 2,
+  "idps": 0,
+  "users": 6
+ },
+ "warnings": [],
+ "with_users": true
+}

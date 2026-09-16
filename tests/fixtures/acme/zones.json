@@ -1,0 +1,68 @@
+[
+ {
+  "id": "nzo_corp",
+  "name": "Corporate Network",
+  "type": "IP",
+  "status": "ACTIVE",
+  "usage": "POLICY",
+  "system": false,
+  "gateways": [
+   {
+    "type": "CIDR",
+    "value": "203.0.113.0/24"
+   }
+  ]
+ },
+ {
+  "id": "nzo_vpn",
+  "name": "VPN",
+  "type": "IP",
+  "status": "ACTIVE",
+  "usage": "POLICY",
+  "system": false,
+  "gateways": [
+   {
+    "type": "CIDR",
+    "value": "198.51.100.0/24"
+   }
+  ]
+ },
+ {
+  "id": "nzo_legacy",
+  "name": "LegacyIpZone",
+  "type": "IP",
+  "status": "ACTIVE",
+  "usage": "POLICY",
+  "system": true
+ },
+ {
+  "id": "nzo_blocked",
+  "name": "BlockedIpZone",
+  "type": "IP",
+  "status": "ACTIVE",
+  "usage": "BLOCKLIST",
+  "system": true,
+  "gateways": [
+   {
+    "type": "CIDR",
+    "value": "192.0.2.0/24"
+   }
+  ]
+ },
+ {
+  "id": "nzo_highrisk",
+  "name": "High-risk countries",
+  "type": "DYNAMIC",
+  "status": "ACTIVE",
+  "usage": "POLICY",
+  "system": false,
+  "locations": [
+   {
+    "country": "KP"
+   },
+   {
+    "country": "IR"
+   }
+  ]
+ }
+]

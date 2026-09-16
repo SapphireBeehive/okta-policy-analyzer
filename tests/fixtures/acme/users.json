@@ -1,0 +1,107 @@
+[
+ {
+  "id": "00u_alice",
+  "status": "ACTIVE",
+  "type": {
+   "id": "oty_default"
+  },
+  "profile": {
+   "login": "alice@acme.com",
+   "email": "alice@acme.com",
+   "department": "Engineering",
+   "countryCode": "US"
+  },
+  "_groupIds": [
+   "00g_everyone",
+   "00g_eng",
+   "00g_us"
+  ]
+ },
+ {
+  "id": "00u_bob",
+  "status": "ACTIVE",
+  "type": {
+   "id": "oty_contractor"
+  },
+  "profile": {
+   "login": "bob@contractor.example",
+   "email": "bob@contractor.example",
+   "department": "Engineering",
+   "countryCode": "US"
+  },
+  "_groupIds": [
+   "00g_everyone",
+   "00g_contractors"
+  ]
+ },
+ {
+  "id": "00u_carol",
+  "status": "ACTIVE",
+  "type": {
+   "id": "oty_default"
+  },
+  "profile": {
+   "login": "carol@acme.com",
+   "email": "carol@acme.com",
+   "department": "IT",
+   "countryCode": "US"
+  },
+  "_groupIds": [
+   "00g_everyone",
+   "00g_admins",
+   "00g_eng",
+   "00g_us"
+  ]
+ },
+ {
+  "id": "00u_dave",
+  "status": "ACTIVE",
+  "type": {
+   "id": "oty_default"
+  },
+  "profile": {
+   "login": "dave@acme.com",
+   "email": "dave@acme.com",
+   "department": "Finance",
+   "countryCode": "US"
+  },
+  "_groupIds": [
+   "00g_everyone",
+   "00g_finance",
+   "00g_us"
+  ]
+ },
+ {
+  "id": "00u_erin",
+  "status": "ACTIVE",
+  "type": {
+   "id": "oty_default"
+  },
+  "profile": {
+   "login": "erin@acme.com",
+   "email": "erin@acme.com",
+   "department": "Sales",
+   "countryCode": "GB"
+  },
+  "_groupIds": [
+   "00g_everyone",
+   "00g_sales"
+  ]
+ },
+ {
+  "id": "00u_breakglass",
+  "status": "ACTIVE",
+  "type": {
+   "id": "oty_default"
+  },
+  "profile": {
+   "login": "breakglass@acme.com",
+   "email": "breakglass@acme.com",
+   "department": "IT",
+   "countryCode": "US"
+  },
+  "_groupIds": [
+   "00g_everyone"
+  ]
+ }
+]

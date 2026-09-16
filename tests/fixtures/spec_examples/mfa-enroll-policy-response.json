@@ -1,0 +1,80 @@
+{
+ "type": "MFA_ENROLL",
+ "id": "policyId",
+ "status": "ACTIVE",
+ "name": "Policy name",
+ "description": "Policy description",
+ "priority": 1,
+ "system": true,
+ "created": "createdDate",
+ "lastUpdated": "lastUpdated",
+ "conditions": {
+  "people": {
+   "groups": {
+    "include": [
+     "groupId"
+    ]
+   }
+  }
+ },
+ "settings": {
+  "type": "AUTHENTICATORS",
+  "authenticators": [
+   {
+    "key": "okta_email",
+    "enroll": {
+     "self": "NOT_ALLOWED"
+    }
+   },
+   {
+    "key": "okta_verify",
+    "enroll": {
+     "self": "OPTIONAL"
+    }
+   },
+   {
+    "key": "okta_password",
+    "enroll": {
+     "self": "REQUIRED"
+    }
+   }
+  ]
+ },
+ "_links": {
+  "self": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}",
+   "hints": {
+    "allow": [
+     "GET",
+     "PUT"
+    ]
+   }
+  },
+  "rules": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/rules",
+   "hints": {
+    "allow": [
+     "POST",
+     "GET"
+    ]
+   }
+  },
+  "mappings": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/mappings",
+   "hints": {
+    "allow": [
+     "GET",
+     "POST"
+    ]
+   }
+  },
+  "deactivate": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/lifecycle/deactivate",
+   "hints": {
+    "allow": [
+     "POST"
+    ]
+   }
+  }
+ }
+}

@@ -1,0 +1,14 @@
+[
+ {
+  "id": "oty_default",
+  "name": "user",
+  "displayName": "User",
+  "default": true
+ },
+ {
+  "id": "oty_contractor",
+  "name": "contractor",
+  "displayName": "Contractor",
+  "default": false
+ }
+]

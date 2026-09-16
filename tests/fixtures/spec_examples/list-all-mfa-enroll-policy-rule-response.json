@@ -1,0 +1,38 @@
+[
+ {
+  "id": "0prgu3g4mon9ARm9F1d7",
+  "status": "ACTIVE",
+  "name": "Test Rule",
+  "priority": 1,
+  "created": "2024-08-27T19:51:39.000Z",
+  "lastUpdated": "2024-08-27T19:51:39.000Z",
+  "system": true,
+  "conditions": {
+   "people": {
+    "users": {
+     "exclude": []
+    }
+   },
+   "network": {
+    "connection": "ANYWHERE"
+   }
+  },
+  "actions": {
+   "enroll": {
+    "self": "CHALLENGE"
+   }
+  },
+  "_links": {
+   "self": {
+    "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/rules/{ruleId}",
+    "hints": {
+     "allow": [
+      "GET",
+      "PUT"
+     ]
+    }
+   }
+  },
+  "type": "MFA_ENROLL"
+ }
+]

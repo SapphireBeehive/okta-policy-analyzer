@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/setup.sh --quiet 2>&1 | tail -n 3",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,67 @@
+{
+ "id": "rule8jjozjGMGbHyC1d6",
+ "status": "ACTIVE",
+ "type": "SIGN_ON",
+ "name": "Deny",
+ "priority": 0,
+ "created": "2024-04-25T17:35:02.000Z",
+ "lastUpdated": "2024-04-25T17:35:02.000Z",
+ "system": false,
+ "conditions": {
+  "people": {
+   "users": {
+    "exclude": []
+   }
+  },
+  "network": {
+   "connection": "ANYWHERE"
+  },
+  "authContext": {
+   "authType": "ANY"
+  },
+  "risk": {
+   "behaviors": []
+  },
+  "riskScore": {
+   "level": "ANY"
+  },
+  "identityProvider": {
+   "provider": "ANY"
+  }
+ },
+ "actions": {
+  "signon": {
+   "access": "DENY",
+   "requireFactor": false,
+   "primaryFactor": "PASSWORD_IDP",
+   "rememberDeviceByDefault": false,
+   "session": {
+    "usePersistentCookie": false,
+    "maxSessionIdleMinutes": 120,
+    "maxSessionLifetimeMinutes": 0
+   }
+  }
+ },
+ "_links": {
+  "self": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/rules/{ruleId}",
+   "hints": {
+    "allow": [
+     "GET",
+     "PUT",
+     "DELETE"
+    ]
+   }
+  },
+  "deactivate": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/rules/{ruleId}",
+   "hints": {
+    "allow": [
+     "GET",
+     "PUT",
+     "DELETE"
+    ]
+   }
+  }
+ }
+}

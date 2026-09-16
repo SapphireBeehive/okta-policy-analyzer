@@ -1,0 +1,53 @@
+{
+ "id": "rule8jjozjGMGbHyC1d6",
+ "status": "ACTIVE",
+ "type": "SIGN_ON",
+ "name": "Challenge VPN users",
+ "priority": 0,
+ "created": "2024-04-25T17:35:02.000Z",
+ "lastUpdated": "2024-04-25T17:35:02.000Z",
+ "system": false,
+ "conditions": {
+  "network": {
+   "connection": "ANYWHERE"
+  },
+  "authContext": {
+   "authType": "RADIUS"
+  }
+ },
+ "actions": {
+  "signon": {
+   "access": "ALLOW",
+   "requireFactor": true,
+   "factorPromptMode": "ALWAYS",
+   "rememberDeviceByDefault": false,
+   "session": {
+    "usePersistentCookie": false,
+    "maxSessionIdleMinutes": 720,
+    "maxSessionLifetimeMinutes": 0
+   }
+  }
+ },
+ "_links": {
+  "self": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/rules/{ruleId}",
+   "hints": {
+    "allow": [
+     "GET",
+     "PUT",
+     "DELETE"
+    ]
+   }
+  },
+  "deactivate": {
+   "href": "https://{yourOktaDomain}/api/v1/policies/{policyId}/rules/{ruleId}",
+   "hints": {
+    "allow": [
+     "GET",
+     "PUT",
+     "DELETE"
+    ]
+   }
+  }
+ }
+}

@@ -1,0 +1,105 @@
+[
+ {
+  "id": "aut_okta_password",
+  "key": "okta_password",
+  "name": "Password",
+  "type": "password",
+  "status": "ACTIVE",
+  "_methods": [
+   {
+    "type": "password",
+    "status": "ACTIVE"
+   }
+  ]
+ },
+ {
+  "id": "aut_okta_email",
+  "key": "okta_email",
+  "name": "Email",
+  "type": "email",
+  "status": "ACTIVE",
+  "_methods": [
+   {
+    "type": "email",
+    "status": "ACTIVE"
+   }
+  ]
+ },
+ {
+  "id": "aut_phone_number",
+  "key": "phone_number",
+  "name": "Phone",
+  "type": "phone",
+  "status": "ACTIVE",
+  "_methods": [
+   {
+    "type": "sms",
+    "status": "ACTIVE"
+   },
+   {
+    "type": "voice",
+    "status": "INACTIVE"
+   }
+  ]
+ },
+ {
+  "id": "aut_okta_verify",
+  "key": "okta_verify",
+  "name": "Okta Verify",
+  "type": "app",
+  "status": "ACTIVE",
+  "_methods": [
+   {
+    "type": "push",
+    "status": "ACTIVE"
+   },
+   {
+    "type": "totp",
+    "status": "ACTIVE"
+   },
+   {
+    "type": "signed_nonce",
+    "status": "ACTIVE"
+   }
+  ]
+ },
+ {
+  "id": "aut_webauthn",
+  "key": "webauthn",
+  "name": "FIDO2 (WebAuthn)",
+  "type": "security_key",
+  "status": "ACTIVE",
+  "_methods": [
+   {
+    "type": "webauthn",
+    "status": "ACTIVE"
+   }
+  ]
+ },
+ {
+  "id": "aut_security_question",
+  "key": "security_question",
+  "name": "Security Question",
+  "type": "security_question",
+  "status": "ACTIVE",
+  "_methods": [
+   {
+    "type": "security_question",
+    "status": "ACTIVE"
+   }
+  ]
+ },
+ {
+  "id": "aut_google_otp",
+  "key": "google_otp",
+  "name": "Google Authenticator",
+  "type": "app",
+  "status": "INACTIVE",
+  "_methods": [
+   {
+    "type": "otp",
+    "status": "ACTIVE"
+   }
+  ]
+ }
+]
