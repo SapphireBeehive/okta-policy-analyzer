@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterable
 from typing import TextIO
 
@@ -243,7 +244,9 @@ def render_console(
     from rich.panel import Panel
     from rich.table import Table
 
-    console = Console(file=file, highlight=False)
+    # When output is not a terminal (files, pipes, CI logs) rich falls back to 80 columns, which truncates the tables.
+    width = None if (file is None and sys.stdout.isatty()) else 160
+    console = Console(file=file, highlight=False, width=width)
     s = result.stats
     console.print(
         Panel(
