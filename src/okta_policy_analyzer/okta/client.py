@@ -43,7 +43,8 @@ def parse_next_link(link_header: str | None) -> str | None:
 
 
 class OktaClient:
-    """Read-only client for one Okta org.
+    """Client for one Okta org. Everything the analyzer does is read-only except the explicit
+    ``apply`` / ``rollback`` commands, which use :meth:`post`, :meth:`put` and :meth:`delete`.
 
     Parameters
     ----------
@@ -167,8 +168,18 @@ class OktaClient:
         return self._request("GET", path, params=params).json()
 
     def post(self, path: str, json: Any) -> Any:
-        """POST (used only for the policy simulation endpoint)."""
-        return self._request("POST", path, json=json).json()
+        """POST (policy simulation, and rule creation when `apply` is used explicitly)."""
+        resp = self._request("POST", path, json=json)
+        return _safe_json(resp) if resp.content else None
+
+    def put(self, path: str, json: Any) -> Any:
+        """PUT a full resource body (rule updates by `apply`/`rollback`)."""
+        resp = self._request("PUT", path, json=json)
+        return _safe_json(resp) if resp.content else None
+
+    def delete(self, path: str) -> None:
+        """DELETE a resource (rule removal by `rollback`)."""
+        self._request("DELETE", path)
 
     def paginate(self, path: str, params: dict[str, Any] | None = None) -> Iterator[dict[str, Any]]:
         """Iterate over all items of a paginated collection, following ``Link rel=next``."""

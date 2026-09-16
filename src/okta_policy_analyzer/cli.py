@@ -66,6 +66,9 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     from .okta.client import OktaClient
     from .okta.snapshot import fetch_snapshot
 
+    if not args.org:
+        print("error: pass --org https://your-org.okta.com or set $OKTA_ORG_URL", file=sys.stderr)
+        return 2
     token = os.environ.get(args.token_env) if args.token_env else None
     bearer = os.environ.get(args.bearer_env) if args.bearer_env else None
     if not token and not bearer:
@@ -175,6 +178,112 @@ def cmd_check(args: argparse.Namespace) -> int:
     if verdicts & {"UNPARSED", "ERROR"}:
         return 2
     return 1 if "VIOLATED" in verdicts else 0
+
+
+def _client(args: argparse.Namespace, default_org: str | None = None):
+    from .okta.client import OktaClient
+
+    org = getattr(args, "org", None) or os.environ.get("OKTA_ORG_URL") or default_org
+    if not org:
+        raise ValueError("no org URL: pass --org or set $OKTA_ORG_URL")
+    token = os.environ.get(args.token_env) if getattr(args, "token_env", None) else None
+    bearer = os.environ.get(args.bearer_env) if getattr(args, "bearer_env", None) else None
+    if not token and not bearer:
+        raise ValueError(
+            f"set the API token in ${args.token_env} (SSWS) or ${args.bearer_env} (OAuth bearer)"
+        )
+    return OktaClient(org, api_token=token, bearer_token=bearer)
+
+
+def cmd_propose(args: argparse.Namespace) -> int:
+    """Invariant → proposed rule change, proved in the model. Exit 0 fix proved, 1 not fixable, 2 unparseable."""
+    import json
+
+    from .okta.snapshot import Snapshot
+    from .remediation import apply_ops_to_snapshot, plan_fix
+
+    snap = Snapshot.load(args.snapshot)
+    plan = plan_fix(snap, args.sentence, _options(args), rule_name=args.rule_name)
+    if args.plan_out:
+        Path(args.plan_out).write_text(plan.to_json(), encoding="utf-8")
+        print(f"plan written to {args.plan_out}", file=sys.stderr)
+    if args.patched_snapshot and plan.ops:
+        apply_ops_to_snapshot(snap, plan.ops).save_dir(args.patched_snapshot)
+        print(f"patched snapshot written to {args.patched_snapshot}", file=sys.stderr)
+    if args.format == "json":
+        _emit(json.dumps(plan.to_dict(), indent=2, ensure_ascii=False), args.output)
+    else:
+        _emit(plan.to_text(), args.output)
+    if plan.status in ("UNPARSED", "ERROR"):
+        return 2
+    return 0 if plan.status in ("FIX_PROVED", "ALREADY_HOLDS") else 1
+
+
+def cmd_apply(args: argparse.Namespace) -> int:
+    """Apply a plan written by `propose` to the org. Requires --yes; --dry-run prints the requests."""
+    import json
+
+    from .remediation import FixPlan, api_body, apply_plan
+
+    plan = FixPlan.from_dict(json.loads(Path(args.plan).read_text(encoding="utf-8")))
+    if not plan.ops:
+        print("plan has no operations; nothing to apply")
+        return 0
+    if plan.status != "FIX_PROVED" and not args.force:
+        print(
+            f"error: plan status is {plan.status}, not FIX_PROVED; re-run `propose` or pass --force",
+            file=sys.stderr,
+        )
+        return 2
+    lines = []
+    for op in plan.ops:
+        if op.op == "create":
+            lines.append(f"POST /api/v1/policies/{op.policy_id}/rules   ({op.policy_name!r})")
+        else:
+            lines.append(f"PUT  /api/v1/policies/{op.policy_id}/rules/{op.rule_id}   ({op.policy_name!r})")
+        body = api_body(op.rule)
+        if not args.activate:
+            body["status"] = "INACTIVE"
+        lines += ["    " + ln for ln in json.dumps(body, indent=2, ensure_ascii=False).splitlines()]
+    print("\n".join(lines))
+    if args.dry_run:
+        print("dry run: nothing sent")
+        return 0
+    if not args.yes:
+        print("error: refusing to change the org without --yes (or use --dry-run)", file=sys.stderr)
+        return 2
+    with _client(args) as client:
+        record = apply_plan(client, plan, activate=args.activate)
+    out = Path(args.record_out or (str(args.plan) + ".applied.json"))
+    out.write_text(record.to_json(), encoding="utf-8")
+    for a in record.applied:
+        print(f"{a.op}d rule {a.rule_id} in policy {a.policy_id}")
+    print(f"rollback record written to {out}")
+    return 0
+
+
+def cmd_rollback(args: argparse.Namespace) -> int:
+    """Undo an `apply` using its record. Requires --yes."""
+    import json
+
+    from .remediation import ApplyRecord, rollback
+
+    record = ApplyRecord.from_dict(json.loads(Path(args.record).read_text(encoding="utf-8")))
+    for a in record.applied:
+        if a.op == "create":
+            print(f"DELETE /api/v1/policies/{a.policy_id}/rules/{a.rule_id}")
+        else:
+            print(f"PUT    /api/v1/policies/{a.policy_id}/rules/{a.rule_id}  (restore previous body)")
+    if args.dry_run:
+        print("dry run: nothing sent")
+        return 0
+    if not args.yes:
+        print("error: refusing to change the org without --yes (or use --dry-run)", file=sys.stderr)
+        return 2
+    with _client(args, default_org=record.org_url) as client:
+        for line in rollback(client, record):
+            print(line)
+    return 0
 
 
 def cmd_explain(args: argparse.Namespace) -> int:
@@ -550,7 +659,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     f = sub.add_parser("fetch", help="pull a policy snapshot from an Okta org (read-only)")
-    f.add_argument("--org", required=True, help="https://your-org.okta.com")
+    f.add_argument(
+        "--org",
+        default=os.environ.get("OKTA_ORG_URL"),
+        help="https://your-org.okta.com (default $OKTA_ORG_URL)",
+    )
     f.add_argument("--token-env", default="OKTA_API_TOKEN", help="env var holding an SSWS API token")
     f.add_argument(
         "--bearer-env", default="OKTA_ACCESS_TOKEN", help="env var holding an OAuth 2.0 access token"
@@ -627,6 +740,47 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--authenticator-overrides", help="authenticator characteristics overrides (YAML)")
     c.add_argument("-v", "--verbose", dest="verbose_sub", action="store_true")
     c.set_defaults(func=cmd_check)
+
+    pr = sub.add_parser(
+        "propose",
+        help="turn a violated invariant into a rule change and prove it fixes the invariant (no org access)",
+    )
+    pr.add_argument("snapshot", help="snapshot directory or file")
+    pr.add_argument("sentence", help="invariant in controlled English (see docs/invariants.md)")
+    pr.add_argument("--rule-name", help="name for a created rule (default derived from the sentence)")
+    pr.add_argument("--plan-out", help="write the plan (Okta API operations + verification) as JSON")
+    pr.add_argument("--patched-snapshot", help="write the snapshot with the change applied to this directory")
+    pr.add_argument("--format", choices=["text", "json"], default="text")
+    pr.add_argument("-o", "--output")
+    pr.add_argument("--authenticator-overrides", help="authenticator characteristics overrides (YAML)")
+    pr.add_argument("-v", "--verbose", dest="verbose_sub", action="store_true")
+    pr.set_defaults(func=cmd_propose, no_cubes=True)
+
+    ap = sub.add_parser("apply", help="apply a plan from `propose` to the org (writes! needs --yes)")
+    ap.add_argument("plan", help="plan JSON written by `propose --plan-out`")
+    ap.add_argument("--org", help="org URL (default $OKTA_ORG_URL)")
+    ap.add_argument("--token-env", default="OKTA_API_TOKEN")
+    ap.add_argument("--bearer-env", default="OKTA_ACCESS_TOKEN")
+    ap.add_argument("--dry-run", action="store_true", help="print the requests without sending them")
+    ap.add_argument("--yes", action="store_true", help="actually send the requests")
+    ap.add_argument("--force", action="store_true", help="apply even if the plan is not FIX_PROVED")
+    ap.add_argument(
+        "--inactive",
+        dest="activate",
+        action="store_false",
+        help="create/update rules as INACTIVE for staged rollout",
+    )
+    ap.add_argument("--record-out", help="where to write the rollback record (default PLAN.applied.json)")
+    ap.set_defaults(func=cmd_apply)
+
+    rb = sub.add_parser("rollback", help="undo an `apply` using its record (writes! needs --yes)")
+    rb.add_argument("record", help="rollback record written by `apply`")
+    rb.add_argument("--org", help="org URL (default: the record's, or $OKTA_ORG_URL)")
+    rb.add_argument("--token-env", default="OKTA_API_TOKEN")
+    rb.add_argument("--bearer-env", default="OKTA_ACCESS_TOKEN")
+    rb.add_argument("--dry-run", action="store_true")
+    rb.add_argument("--yes", action="store_true")
+    rb.set_defaults(func=cmd_rollback)
 
     e = sub.add_parser("explain", help="evaluate one concrete user/context with the reference interpreter")
     e.add_argument("snapshot")

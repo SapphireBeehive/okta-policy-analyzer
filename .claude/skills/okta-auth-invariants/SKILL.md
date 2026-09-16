@@ -77,6 +77,12 @@ Worked examples:
 - "Contractors can only reach Salesforce from the Corporate Network or VPN" → contractors outside both zones must
   hit a DENY rule.
 
+## When the human wants it fixed
+
+Switch to the `okta-policy-remediation` skill: `okta-policy-analyzer propose SNAPSHOT "<sentence>" --plan-out
+plan.json` synthesises the rule change, proves it in the model and shows the impact; nothing is written to the
+org without `apply --yes` after the human has seen the dry-run.
+
 ## Interpreting strength labels
 
 DENY < 1FA knowledge (password only) < 1FA possession (email/SMS/OTP alone) < 1FA phishing-resistant

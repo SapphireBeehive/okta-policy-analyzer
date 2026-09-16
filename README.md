@@ -8,8 +8,12 @@ risk levels symbolically, and uses the **z3 SMT solver** to answer, exactly and 
 
 It also finds policy bugs (shadowed and dead rules, DENY rules pre-empted by earlier ALLOW rules, weak catch-all
 rules, requirements no enrollable authenticator can satisfy), **proves or refutes invariants you state in plain
-English** ("Contractors can only reach Salesforce from the Corporate Network or VPN"), checks YAML assertions,
-and can export the same model to **TLA+** for TLC as an independent second backend.
+English** ("Contractors can only reach Salesforce from the Corporate Network or VPN"), **proposes the rule
+change that makes a violated invariant hold and proves it before applying it**, checks YAML assertions, and
+can export the same model to **TLA+** for TLC as an independent second backend.
+
+Operating it with Claude: `CLAUDE.md` is the operating guide (setup for a tenant, checking, making rules
+safely) and `.claude/skills/` holds the two playbooks; `scripts/setup.sh` installs and self-tests.
 
 ```
 $ okta-policy-analyzer analyze tests/fixtures/acme
@@ -96,6 +100,12 @@ okta-policy-analyzer check snapshots/acme --file corpsec-invariants.txt --yaml-o
 # 3b. Verify YAML assertions (exit code 1 on violation)
 okta-policy-analyzer verify snapshots/acme --assertions policy-assertions.yaml
 
+# 3c. Make a rule: propose the change that fixes a violated invariant, proved in the model, then apply it
+okta-policy-analyzer propose snapshots/acme "Only Finance can access Payroll (Workday)" --plan-out plan.json
+okta-policy-analyzer apply plan.json --dry-run                       # exact API requests, nothing sent
+okta-policy-analyzer apply plan.json --yes                           # writes plan.json.applied.json for rollback
+okta-policy-analyzer rollback plan.json.applied.json --yes
+
 # 4. Ask targeted questions
 okta-policy-analyzer who snapshots/acme --app Salesforce --max-strength ONE_FA_KNOWLEDGE  # who gets in with a password only?
 okta-policy-analyzer explain snapshots/acme --user alice@acme.com --zone VPN --managed --platform MACOS
@@ -146,6 +156,17 @@ closest supported phrasing or name). `--yaml-out` exports the formal assertions 
 The repository ships a Claude skill, `.claude/skills/okta-auth-invariants/SKILL.md`, that teaches an agent to
 run this workflow for a security engineer: take a snapshot, orient with `analyze`, turn the question into an
 invariant, confirm the reading, and explain a counterexample using the findings and fix hints.
+
+## Making rules
+
+`propose` takes a violated invariant and synthesises the smallest change that makes it hold: a top-priority
+DENY rule whose conditions are the invariant's premise, or, for MFA/strength invariants, a stronger
+verification method on each rule the counterexamples land on. It applies the change to an in-memory copy of
+the snapshot, re-proves the invariant there, formally diffs before and after (who lost access, who needs
+stronger authentication, and whether anything became *more* permissive) and lists findings the change
+introduces. The plan is JSON containing the exact Okta API operations; `apply --dry-run` prints them,
+`apply --yes` sends them and records a rollback file, `rollback --yes` undoes them. See
+[docs/remediation.md](docs/remediation.md).
 
 ## Assertions
 
@@ -237,11 +258,15 @@ src/okta_policy_analyzer/
   diff.py              formal snapshot diff
   assertions.py        YAML assertions
   invariants.py        plain-English invariants -> assertions + formal reading
+  remediation.py       violated invariant -> rule change proved in the model; apply / rollback
   interpreter.py       concrete reference interpreter
   tla.py               TLA+ export + TLC runner
   report.py, cli.py
 tests/fixtures/acme    synthetic tenant snapshot exercising every analysis
 docs/semantics.md      Okta semantics relied upon, with sources and assumptions
 docs/invariants.md     controlled-English phrasebook for `check`
-.claude/skills/        Claude skill: investigate auth policies with plain-English invariants
+docs/remediation.md    how `propose` builds and verifies a fix; `apply` / `rollback`
+CLAUDE.md              operating guide for Claude (setup, check, make rules)
+.claude/skills/        Claude skills: okta-auth-invariants (check), okta-policy-remediation (make rules)
+scripts/setup.sh       install + self-test (also the SessionStart hook in .claude/settings.json)
 ```

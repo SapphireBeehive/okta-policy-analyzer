@@ -16,3 +16,5 @@ tla_out/
 states/
 *.tla.bak
 .env
+plans/
+*.applied.json
