@@ -19,14 +19,17 @@ import z3
 @dataclass(frozen=True)
 class Lit:
     var: z3.ExprRef
-    value: Any  # bool for Bool vars, int for Int vars
-    positive: bool = True  # False means var != value (only used for Int vars in explanations)
+    value: Any  # bool for Bool vars, int for Int vars, frozenset[int] for a merged set of enum values
+    positive: bool = True  # False means var != value / var ∉ set
 
     def expr(self) -> z3.BoolRef:
         if z3.is_bool(self.var):
             e = self.var if self.value else z3.Not(self.var)
             return e if self.positive else z3.Not(e)
-        e = self.var == self.value
+        if isinstance(self.value, frozenset):
+            e = z3.Or(*[self.var == v for v in sorted(self.value)])
+        else:
+            e = self.var == self.value
         return e if self.positive else z3.Not(e)
 
 
@@ -225,6 +228,49 @@ def _minimise(cube: list[Lit], checker: z3.Solver) -> list[Lit]:
     return lits
 
 
+def merge_enum_values(cubes: list[Cube]) -> list[Cube]:
+    """Presentation: merge cubes that differ only in the value of one integer (enum) variable.
+
+    ``platform == IOS ∧ z`` and ``platform == ANDROID ∧ z`` become ``platform ∈ {ANDROID, IOS} ∧ z`` (a
+    frozenset-valued literal). Repeated until no more merges apply. Logically equivalent to the input.
+    """
+    changed = True
+    while changed:
+        changed = False
+        result: list[Cube] = []
+        used: set[int] = set()
+        for i, a in enumerate(cubes):
+            if i in used:
+                continue
+            merged = a
+            for j in range(i + 1, len(cubes)):
+                if j in used:
+                    continue
+                m = _merge_pair(merged, cubes[j])
+                if m is not None:
+                    merged = m
+                    used.add(j)
+                    changed = True
+            result.append(merged)
+        cubes = result
+    return cubes
+
+
+def _merge_pair(a: Cube, b: Cube) -> Cube | None:
+    if len(a.lits) != len(b.lits):
+        return None
+    diff = [(x, y) for x, y in zip(a.lits, b.lits, strict=True) if x != y]
+    if len(diff) != 1:
+        return None
+    x, y = diff[0]
+    if not (x.var.eq(y.var) and not z3.is_bool(x.var) and x.positive and y.positive):
+        return None
+    vx = x.value if isinstance(x.value, frozenset) else frozenset({x.value})
+    vy = y.value if isinstance(y.value, frozenset) else frozenset({y.value})
+    new = Lit(x.var, vx | vy, True)
+    return Cube([new if lit == x else lit for lit in a.lits])
+
+
 def describe_cube(cube: Cube, namer) -> str:  # noqa: ANN001 - callable(var, value, positive) -> str
     if not cube.lits:
         return "anyone / any context"
@@ -236,7 +282,7 @@ def describe_dnf(dnf: DNF, namer, *, bullet: str = "• ") -> list[str]:  # noqa
         return [f"{bullet}nobody (unsatisfiable)"]
     if dnf.trivially_true:
         return [f"{bullet}everyone, in every context"]
-    lines = [bullet + describe_cube(c, namer) for c in dnf.cubes]
+    lines = [bullet + describe_cube(c, namer) for c in merge_enum_values(dnf.cubes)]
     if not dnf.complete:
         lines.append(f"{bullet}… (enumeration bound reached; the list above is incomplete)")
     return lines

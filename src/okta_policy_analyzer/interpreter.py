@@ -15,7 +15,19 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from .el.ast import ArrayLit, Attr, BinOp, Call, Expr, Literal, Ternary, UnaryOp
+from .el.ast import ArrayLit, Attr, BinOp, Call, Elvis, Expr, Literal, MethodCall, Ternary, UnaryOp
+from .el.evaluator import (
+    Criteria,
+    bool_typed,
+    context_bool,
+    context_equality,
+    count_comparison,
+    equality_predicate,
+    group_satisfies,
+    membership_atom,
+    predicate_atom,
+    string_term,
+)
 from .model import (
     DevicePlatform,
     PlatformSpec,
@@ -179,26 +191,34 @@ class Interpreter:
         r = self._bool(e, w)
         return r if r is not None else w.opaque.get(e.source(), False)
 
+    def _bool_or_opaque(self, e: Expr, w: World) -> bool:
+        b = self._bool(e, w)
+        return b if b is not None else w.opaque.get(e.source(), False)
+
     def _bool(self, e: Expr, w: World) -> bool | None:  # noqa: C901
         if isinstance(e, Literal):
             return e.value if isinstance(e.value, bool) else None
         if isinstance(e, UnaryOp) and e.op == "!":
-            inner = self._bool(e.operand, w)
-            return not inner if inner is not None else not w.opaque.get(e.operand.source(), False)
+            return not self._bool_or_opaque(e.operand, w)
         if isinstance(e, BinOp):
             if e.op in ("&&", "||"):
-                lft = self._bool(e.left, w)
-                rgt = self._bool(e.right, w)
-                lft = lft if lft is not None else w.opaque.get(e.left.source(), False)
-                rgt = rgt if rgt is not None else w.opaque.get(e.right.source(), False)
+                lft = self._bool_or_opaque(e.left, w)
+                rgt = self._bool_or_opaque(e.right, w)
                 return (lft and rgt) if e.op == "&&" else (lft or rgt)
+            cc = count_comparison(e)
+            if cc is not None:
+                return self._count_compare(*cc, w)
             if e.op in ("==", "!="):
                 eq = self._equality(e.left, e.right, w)
                 if eq is None:
                     eq = self._equality(e.right, e.left, w)
+                if eq is None and bool_typed(e.left) and bool_typed(e.right):
+                    eq = self._bool_or_opaque(e.left, w) == self._bool_or_opaque(e.right, w)
                 if eq is None:
                     return None
                 return eq if e.op == "==" else not eq
+            if e.op == "matches":
+                return self._predicate_atom(e, w)
             return None
         if isinstance(e, Ternary):
             c = self._bool(e.cond, w)
@@ -207,43 +227,63 @@ class Interpreter:
             if c is None or t is None or o is None:
                 return None
             return t if c else o
-        if isinstance(e, Call):
+        if isinstance(e, Elvis):
+            return self._elvis(e, w)
+        if isinstance(e, Call | MethodCall):
             return self._call(e, w)
-        if isinstance(e, Attr) and e.path[0] == "user":
-            return w.attrs.get(e.normalized) is True
+        if isinstance(e, Attr):
+            kind = context_bool(e)
+            if kind is not None:
+                return self._context(kind, True, w)
+            if e.path[0] == "user" and len(e.path) > 1:
+                return w.attrs.get(e.normalized) is True
+            return None
+        return None
+
+    def _elvis(self, e: Elvis, w: World) -> bool | None:
+        if isinstance(e.left, Attr) and e.left.path[0] == "user" and len(e.left.path) > 1:
+            right = self._bool(e.right, w)
+            if right is None:
+                return None
+            v = w.attrs.get(e.left.normalized)
+            return right if v is None else v is True
+        if bool_typed(e.left) and bool_typed(e.right):
+            return self._bool_or_opaque(e.left, w)
         return None
 
     def _equality(self, left: Expr, right: Expr, w: World) -> bool | None:
         if not isinstance(right, Literal):
             return None
         lit = right.value
-        if isinstance(left, Attr) and left.path[0] == "user":
-            return w.attrs.get(left.normalized) == lit
-        if (
-            isinstance(left, Call)
-            and left.name in ("String.toLowerCase", "String.toUpperCase")
-            and len(left.args) == 1
-        ):
-            arg = left.args[0]
-            if isinstance(arg, Attr) and arg.path[0] == "user" and isinstance(lit, str):
-                fn = str.lower if left.name.endswith("LowerCase") else str.upper
-                return self._predicate(
-                    left.name, arg.normalized, lit, lambda v: v is not None and fn(str(v)) == lit, w
-                )
-        if isinstance(left, Call) and (
-            left.name.startswith("isMemberOf")
-            or left.name
-            in (
-                "String.stringContains",
-                "String.startsWith",
-                "String.endsWith",
-                "Arrays.contains",
-                "Arrays.isEmpty",
-            )
-        ):
-            b = self._call(left, w)
-            if b is not None and isinstance(lit, bool):
-                return b if lit else not b
+        if isinstance(left, Attr):
+            ctx = context_equality(left, lit)
+            if ctx is not None:
+                return self._context(*ctx, w)
+            if left.path[0] == "user" and len(left.path) > 1:
+                return w.attrs.get(left.normalized) == lit
+            return None
+        term = string_term(left)
+        if term is not None:
+            if not term.transforms:
+                return w.attrs.get(term.path) == lit
+            if isinstance(lit, str):
+                pa = equality_predicate(term, lit)
+                return self._predicate(pa.function, pa.path, pa.literal, pa.truth, w)
+            return None
+        if isinstance(lit, bool) and bool_typed(left):
+            b = self._bool_or_opaque(left, w)
+            return b if lit else not b
+        return None
+
+    def _context(self, kind: str, value: Any, w: World) -> bool | None:
+        if kind == "risk":
+            return w.risk.value == value
+        if kind == "managed":
+            return w.managed == value
+        if kind == "registered":
+            return w.registered == value
+        if kind == "platform":
+            return w.platform == DevicePlatform(value)
         return None
 
     def _predicate(self, function: str, path: str, literal: Any, truth, w: World) -> bool:  # noqa: ANN001
@@ -255,7 +295,26 @@ class Interpreter:
                 return w.predicates.get(name, False)
         return w.predicates.get(name, False)
 
-    def _call(self, c: Call, w: World) -> bool | None:  # noqa: C901
+    def _predicate_atom(self, e: Expr, w: World) -> bool | None:
+        pa = predicate_atom(e)
+        if pa is None:
+            return None
+        return self._predicate(pa.function, pa.path, pa.literal, pa.truth, w)
+
+    def _call(self, c: Call | MethodCall, w: World) -> bool | None:
+        ma = membership_atom(c)
+        if ma is not None:
+            criteria, negated = ma
+            d = any(w.in_group(g, self.t) for g in self.matching_groups(criteria))
+            return not d if negated else d
+        p = self._predicate_atom(c, w)
+        if p is not None:
+            return p
+        if isinstance(c, Call):
+            return self._static_group_call(c, w)
+        return None
+
+    def _static_group_call(self, c: Call, w: World) -> bool | None:
         t = self.t
         name = c.name
         if name == "isMemberOfGroup" and len(c.args) == 1 and isinstance(c.args[0], Literal):
@@ -286,42 +345,22 @@ class Interpreter:
                     return None
                 ids = [g.id for g in t.groups.values() if rx.search(g.name)]
             return any(w.in_group(i, t) for i in ids)
-        if name in ("String.stringContains", "String.startsWith", "String.endsWith") and len(c.args) == 2:
-            a, b = c.args
-            if (
-                isinstance(a, Attr)
-                and a.path[0] == "user"
-                and isinstance(b, Literal)
-                and isinstance(b.value, str)
-            ):
-                lit = b.value
-                fn = {
-                    "String.stringContains": lambda v: v is not None and lit in str(v),
-                    "String.startsWith": lambda v: v is not None and str(v).startswith(lit),
-                    "String.endsWith": lambda v: v is not None and str(v).endswith(lit),
-                }[name]
-                return self._predicate(name, a.normalized, lit, fn, w)
-            return None
-        if name == "Arrays.contains" and len(c.args) == 2:
-            a, b = c.args
-            if isinstance(a, Attr) and a.path[0] == "user" and isinstance(b, Literal):
-                lit = b.value
-                return self._predicate(
-                    name, a.normalized, lit, lambda v: isinstance(v, list | tuple) and lit in v, w
-                )
-            return None
-        if name == "Arrays.isEmpty" and len(c.args) == 1:
-            a = c.args[0]
-            if isinstance(a, Attr) and a.path[0] == "user":
-                return self._predicate(
-                    name,
-                    a.normalized,
-                    None,
-                    lambda v: v is None or (isinstance(v, list | tuple) and len(v) == 0),
-                    w,
-                )
-            return None
         return None
+
+    def matching_groups(self, criteria: Criteria) -> list[str]:
+        """Snapshot groups satisfying every criterion (closed world) — same resolution as the encoder."""
+        return [g.id for g in self.t.groups.values() if group_satisfies(criteria, g.id, g.name, g.type)]
+
+    def _count_compare(self, criteria: Criteria, op: str, n: int, w: World) -> bool:
+        count = sum(1 for g in self.matching_groups(criteria) if w.in_group(g, self.t))
+        return {
+            ">": count > n,
+            ">=": count >= n,
+            "<": count < n,
+            "<=": count <= n,
+            "==": count == n,
+            "!=": count != n,
+        }[op]
 
 
 def _literal_list(e: Expr) -> list[Any] | None:

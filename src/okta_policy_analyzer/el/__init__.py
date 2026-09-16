@@ -1,9 +1,10 @@
-"""Okta Expression Language (EL) support: parser, AST, concrete evaluator and atom extraction.
+"""Okta Expression Language (EL) support: parser, AST, concrete evaluator and atom recognisers.
 
 Okta EL is a SpEL-derived expression language used in group rules (``conditions.expression.value``) and
 in Identity Engine authentication-policy custom conditions (``conditions.elCondition.condition``).
-We support the Boolean subset that matters for policy analysis; everything else is preserved as an
-opaque sub-expression that the formal model treats as a free (uninterpreted) predicate.
+The parser accepts the whole documented grammar; the evaluator interprets the documented function catalogue;
+the recognisers in :mod:`.evaluator` classify the Boolean fragments that get exact semantics in the formal
+model — everything else is preserved as an opaque sub-expression that the model treats as a free predicate.
 """
 
 from .ast import (
@@ -11,12 +12,18 @@ from .ast import (
     Attr,
     BinOp,
     Call,
+    Elvis,
     Expr,
+    Index,
     Literal,
+    MapLit,
+    MethodCall,
+    Projection,
+    Property,
     Ternary,
     UnaryOp,
 )
-from .evaluator import EvalError, Unknown, evaluate
+from .evaluator import Env, EvalError, GroupCriterion, Unknown, evaluate
 from .parser import ELSyntaxError, parse
 
 __all__ = [
@@ -25,9 +32,17 @@ __all__ = [
     "BinOp",
     "Call",
     "ELSyntaxError",
+    "Elvis",
+    "Env",
     "EvalError",
     "Expr",
+    "GroupCriterion",
+    "Index",
     "Literal",
+    "MapLit",
+    "MethodCall",
+    "Projection",
+    "Property",
     "Ternary",
     "UnaryOp",
     "Unknown",

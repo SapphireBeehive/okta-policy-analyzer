@@ -463,9 +463,16 @@ class Universe:
 
     # ------------------------------------------------------------------------------ naming
     def literal_text(self, var: z3.ExprRef, value: Any, positive: bool = True) -> str:
-        """Human-readable text for ``var == value`` (or its negation)."""
+        """Human-readable text for ``var == value`` (or its negation); ``value`` may be a set of enum values."""
         name = str(var)
         t = self.tenant
+        if isinstance(value, frozenset):
+            domain = self._enum_domain(name)
+            labels = [self._enum_label(name, v) for v in sorted(value)]
+            if domain is not None and len(value) > len(domain) / 2 and len(value) < len(domain):
+                rest = [self._enum_label(name, v) for v in range(len(domain)) if v not in value]
+                return f"{self._enum_name(name)} {'∉' if positive else '∈'} {{{', '.join(rest)}}}"
+            return f"{self._enum_name(name)} {'∈' if positive else '∉'} {{{', '.join(labels)}}}"
         if name.startswith("member["):
             g = name[7:-1]
             return ("member of " if (value is True) == positive else "not member of ") + t.group_name(g)
@@ -517,6 +524,55 @@ class Universe:
         if name.startswith("opaque:"):
             return ("" if (value is True) == positive else "not ") + f"[{name[7:]}]"
         return f"{name} {'==' if positive else '!='} {value}"
+
+    def _enum_domain(self, name: str) -> list[Any] | None:
+        if name == "dev_platform":
+            return list(PLATFORMS)
+        if name == "risk":
+            return list(RISKS)
+        if name == "auth_type":
+            return list(AUTH_TYPES)
+        if name == "idp":
+            return ["OKTA", *self.idp_ids, OTHER]
+        if name == "user_type":
+            return [*self.user_type_ids, OTHER]
+        if name.startswith("attr:"):
+            return [*self.attr_literals.get(name[5:], []), OTHER]
+        return None
+
+    def _enum_name(self, name: str) -> str:
+        return {
+            "dev_platform": "platform",
+            "risk": "risk",
+            "auth_type": "authType",
+            "idp": "idp",
+            "user_type": "userType",
+        }.get(name, name[5:] if name.startswith("attr:") else name)
+
+    def _enum_label(self, name: str, value: int) -> str:
+        t = self.tenant
+        if name == "dev_platform":
+            return PLATFORMS[value].value
+        if name == "risk":
+            return RISKS[value].value
+        if name == "auth_type":
+            return AUTH_TYPES[value]
+        if name == "idp":
+            return (
+                "OKTA"
+                if value == 0
+                else (
+                    t.idps.get(self.idp_ids[value - 1], self.idp_ids[value - 1])
+                    if value - 1 < len(self.idp_ids)
+                    else OTHER
+                )
+            )
+        if name == "user_type":
+            return t.user_types[self.user_type_ids[value]].name if value < len(self.user_type_ids) else OTHER
+        if name.startswith("attr:"):
+            lits = self.attr_literals.get(name[5:], [])
+            return repr(lits[value]) if value < len(lits) else "<any other value>"
+        return str(value)
 
     def group_rule_summary(self) -> list[str]:
         return [
