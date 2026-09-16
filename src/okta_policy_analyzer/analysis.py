@@ -16,7 +16,7 @@ import z3
 
 from .assurance import Catalogue, RuleAssurance, Strength, classify_rule, combined_rule_strength
 from .model import Access, AccessAction, EnrollStatus, Policy, Rule, SignOnAction, Status, Tenant
-from .smt.dnf import DNF, describe_dnf, prime_implicants, project
+from .smt.dnf import DNF, describe_dnf, prime_implicants, project, var_names
 from .smt.encoder import EncodedPolicy, PolicyEncoder
 from .smt.universe import Universe, UniverseOptions, Witness
 
@@ -255,41 +255,71 @@ class Analyzer:
         self._session = self.enc.session_policies
         self._enroll = self.enc.enrollment_policies
         self.axioms = self.u.axioms()
+        self._axiom_names = [var_names(a) for a in self.axioms]
+        self._slice_cache: dict[frozenset[str], list[z3.BoolRef]] = {}
 
     # ------------------------------------------------------------------------------ solver helpers
+    def axioms_for(self, *fs: z3.BoolRef) -> list[z3.BoolRef]:
+        """The axioms connected (transitively, through shared variables) to the formulas.
+
+        Axioms about variables the formulas never touch cannot change their satisfiability or their
+        projections, so dropping them is exact; it keeps solver problems small on large tenants.
+        """
+        names: set[str] = set()
+        for f in fs:
+            names |= var_names(f)
+        key = frozenset(names)
+        cached = self._slice_cache.get(key)
+        if cached is not None:
+            return cached
+        kept: set[int] = set()
+        changed = True
+        while changed:
+            changed = False
+            for i, an_ in enumerate(self._axiom_names):
+                if i in kept or not an_ & names:
+                    continue
+                kept.add(i)
+                if not an_ <= names:
+                    names |= an_
+                    changed = True
+        result = [self.axioms[i] for i in sorted(kept)]
+        if len(self._slice_cache) > 4096:
+            self._slice_cache.clear()
+        self._slice_cache[key] = result
+        return result
+
     def sat(self, *fs: z3.BoolRef) -> bool:
         self._queries += 1
         s = z3.Solver()
-        s.add(*self.axioms, *fs)
+        s.add(*self.axioms_for(*fs), *fs)
         return s.check() == z3.sat
 
     def model(self, *fs: z3.BoolRef) -> z3.ModelRef | None:
         self._queries += 1
         s = z3.Solver()
-        s.add(*self.axioms, *fs)
+        s.add(*self.axioms_for(*fs), *fs)
         return s.model() if s.check() == z3.sat else None
 
     def who(self, f: z3.BoolRef, *, limit: int | None = None) -> DNF:
         self._queries += 1
+        ax = self.axioms_for(f)
         return prime_implicants(
-            project(f, self.u.context_vars(), self.axioms),
-            self.u.who_vars(),
-            self.axioms,
-            limit=limit or self.opt.dnf_limit,
+            project(f, self.u.context_vars(), ax), self.u.who_vars(), ax, limit=limit or self.opt.dnf_limit
         )
 
     def when(self, f: z3.BoolRef, *, limit: int | None = None) -> DNF:
         self._queries += 1
+        ax = self.axioms_for(f)
         return prime_implicants(
-            project(f, self.u.who_vars(), self.axioms),
-            self.u.context_vars(),
-            self.axioms,
-            limit=limit or self.opt.dnf_limit,
+            project(f, self.u.who_vars(), ax), self.u.context_vars(), ax, limit=limit or self.opt.dnf_limit
         )
 
     def cubes(self, f: z3.BoolRef, *, limit: int | None = None) -> DNF:
         self._queries += 1
-        return prime_implicants(f, self.u.all_vars(), self.axioms, limit=limit or self.opt.full_cube_limit)
+        return prime_implicants(
+            f, self.u.all_vars(), self.axioms_for(f), limit=limit or self.opt.full_cube_limit
+        )
 
     def lines(self, dnf: DNF) -> list[str]:
         return [line[2:] for line in describe_dnf(dnf, self.u.literal_text, bullet="• ")]
@@ -299,7 +329,7 @@ class Analyzer:
         m = self.model(f)
         if m is None:
             return None
-        cube = prime_implicants(f, self.u.all_vars(), self.axioms, limit=1)
+        cube = prime_implicants(f, self.u.all_vars(), self.axioms_for(f), limit=1)
         minimal = self.lines(cube)[0] if cube.cubes else ""
         concrete: Witness = self.u.witness(m, full=True)
         return f"{minimal}  (e.g. {concrete.describe(self.t)})" if minimal else concrete.describe(self.t)
@@ -913,6 +943,17 @@ class Analyzer:
     def _inventory_findings(self) -> None:
         for w in self.t.warnings:
             self.add(Finding("INFO", "loader-warning", w, "Reported while normalising the snapshot."))
+        for a in self.u.assumptions:
+            if a.startswith("closed world:"):
+                self.add(
+                    Finding(
+                        "LOW",
+                        "group-criteria-match-nothing",
+                        "An expression's group criteria match no existing group",
+                        a
+                        + ". The tool resolves name/type-based group criteria against the snapshot (closed world); a group created later could change this.",
+                    )
+                )
 
 
 # ------------------------------------------------------------------------------------------ helpers

@@ -389,7 +389,15 @@ def active_group_rule_closure(tenant: Tenant, w: World) -> set[str]:
 
     added: set[str] = set()
     names = frozenset(tenant.group_name(g) for g in w.groups)
-    env = Env(attrs=w.attrs, group_ids=frozenset(w.groups), group_names=names)
+    env = Env(
+        attrs=w.attrs,
+        group_ids=frozenset(w.groups),
+        group_names=names,
+        groups=[
+            (g, tenant.group_name(g), tenant.groups[g].type if g in tenant.groups else "OKTA_GROUP")
+            for g in w.groups
+        ],
+    )
     for gr in tenant.group_rules:
         if gr.status != Status.ACTIVE or gr.expr_ast is None:
             continue

@@ -554,6 +554,8 @@ def criteria_from_values(maps: Sequence[Any]) -> tuple[GroupCriterion, ...]:
             values = tuple(_s(v) for v in _as_list(m[k]))
             op = (operator or "STARTS_WITH") if k == "group.profile.name" else "EXACT"
             out.append(GroupCriterion(k, values, op))
+    if not out:
+        raise Unknown("empty group criteria")
     return tuple(out)
 
 
@@ -657,7 +659,11 @@ def count_comparison(e: Expr) -> tuple[Criteria, str, int] | None:
     if not isinstance(e, BinOp) or e.op not in _FLIP:
         return None
     for count_side, lit_side, op in ((e.left, e.right, e.op), (e.right, e.left, _FLIP[e.op])):
-        if isinstance(lit_side, Literal) and isinstance(lit_side.value, int) and not isinstance(lit_side.value, bool):
+        if (
+            isinstance(lit_side, Literal)
+            and isinstance(lit_side.value, int)
+            and not isinstance(lit_side.value, bool)
+        ):
             c = group_count(count_side)
             if c is not None:
                 return c, op, lit_side.value
@@ -765,7 +771,9 @@ def _regex_predicate(term: StringTerm, pattern: str) -> PredicateAtom | None:
         rx = re.compile(pattern)
     except re.error:
         return None
-    return PredicateAtom(term.function("matches"), term.path, pattern, lambda v: regex_matches(rx, term.apply(v)))
+    return PredicateAtom(
+        term.function("matches"), term.path, pattern, lambda v: regex_matches(rx, term.apply(v))
+    )
 
 
 def equality_predicate(term: StringTerm, lit: str) -> PredicateAtom:
@@ -853,7 +861,10 @@ _PLATFORM_NAMES = {
     # MOBILE_OTHER / DESKTOP_OTHER both fall into the model's single OTHER bucket: keep them opaque rather than
     # identify two mutually exclusive atoms.
 }
-_CONTEXT_BOOLS = {("device", "profile", "managed"): "managed", ("device", "profile", "registered"): "registered"}
+_CONTEXT_BOOLS = {
+    ("device", "profile", "managed"): "managed",
+    ("device", "profile", "registered"): "registered",
+}
 
 
 def context_bool(e: Expr) -> str | None:
@@ -927,4 +938,6 @@ def bool_typed(e: Expr) -> bool:
         return e.name.startswith("isMemberOf") or e.name in _BOOL_CALLS
     if isinstance(e, MethodCall):
         return e.name in _BOOL_METHODS
+    if isinstance(e, Attr):  # documented Boolean context attributes; a bare user attribute has unknown type
+        return context_bool(e) is not None
     return False

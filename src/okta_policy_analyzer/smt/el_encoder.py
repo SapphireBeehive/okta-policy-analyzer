@@ -224,7 +224,9 @@ class ELEncoder:
     # ------------------------------------------------------------------------------ membership
     def matching_groups(self, criteria: Criteria) -> list[str]:
         """Snapshot groups satisfying every criterion (closed world), in snapshot order."""
-        return [g.id for g in self.u.tenant.groups.values() if group_satisfies(criteria, g.id, g.name, g.type)]
+        return [
+            g.id for g in self.u.tenant.groups.values() if group_satisfies(criteria, g.id, g.name, g.type)
+        ]
 
     def _membership(self, criteria: Criteria, source: str) -> z3.BoolRef:
         ids = self.matching_groups(criteria)
