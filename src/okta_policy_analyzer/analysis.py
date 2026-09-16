@@ -1030,9 +1030,8 @@ class Analyzer:
                     if not self.sat(f):
                         continue
                     strength = combined_rule_strength(action, ra.assurance)
-                    rows.append(
-                        CombinedRow(sep.policy, srule, ra.rule, strength, self.lines(self.who(f, limit=8)))
-                    )
+                    who = self.lines(self.who(f, limit=8)) if self.opt.combined_who else []
+                    rows.append(CombinedRow(sep.policy, srule, ra.rule, strength, who))
                     if strength > Strength.DENY and (weakest is None or strength < weakest):
                         weakest = strength
         rows.sort(key=lambda r: (r.strength, r.session_policy.priority, r.app_rule.priority))

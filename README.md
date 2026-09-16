@@ -163,6 +163,15 @@ The report also contains a **group view**: for every group referenced by a rule,
 outcome its members can obtain per policy (members may hold other memberships too), and an executive line
 naming the weakest way into any app.
 
+## Performance
+
+Every statement in a report is a solver query, so run time scales with the number of rules and findings rather
+than with the number of users. Indicative timings on a 4-core machine: the bundled fixture (5 policies, 20 rules)
+in about 4 s; a synthetic tenant with 300 groups, 30 policies and 270 rules in about 7 minutes single-threaded
+(`-j 4` divides that by the number of workers; `--no-cubes` skips the joint who+context enumeration). Axioms are
+sliced per query to the variables they touch, prime-implicant enumeration is bounded (`--dnf-limit`) with a coarse
+but sound fallback, and the TLA+ export slices the state space per policy.
+
 ## Semantics and assumptions
 
 `docs/semantics.md` lists every Okta behaviour the model encodes with its source, and every assumption made where
