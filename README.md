@@ -60,6 +60,9 @@ Standard apps policy  →  GitHub, Salesforce
    TLC and z3 agree on the reachability of every rule and on every assertion.
 8. **Reality check** (`okta/simulate.py`): sampled worlds are sent to Okta's policy simulation API and Okta's
    winning rule is compared with the encoder's.
+9. **Diff** (`diff.py`): two snapshots are encoded in one universe and compared per app — `EQUIVALENT`,
+   `MORE_PERMISSIVE`, `LESS_PERMISSIVE` or `INCOMPARABLE` — with the exact population that gained or lost
+   access or whose required authentication got weaker, plus the structural rule changes behind it.
 
 A reference interpreter (`interpreter.py`) evaluates one concrete world directly; differential tests sample
 hundreds of random worlds and check that the encoder and the interpreter always pick the same rule.
@@ -96,6 +99,12 @@ okta-policy-analyzer export-tla snapshots/acme -o tla --assertions policy-assert
 
 # 6. Compare with Okta's own evaluator (needs API access)
 okta-policy-analyzer simulate-validate snapshots/acme --app Salesforce --samples 50
+
+# 7. Formal diff between two snapshots (CI gate for policy changes): who gained access, who got weaker auth
+okta-policy-analyzer diff snapshots/acme-yesterday snapshots/acme --fail-on-more-permissive
+
+# Large tenants: analyse policies in parallel and skip the joint who+context cubes
+okta-policy-analyzer analyze snapshots/acme -j 4 --no-cubes
 ```
 
 Read-only OAuth scopes for a full snapshot: `okta.policies.read okta.apps.read okta.groups.read
@@ -138,6 +147,7 @@ Expectations: `access`, `min_strength`, `max_strength`, `passwordless: false`, `
 | `weak-catch-all` | HIGH | the catch-all grants single-factor access |
 | `no-session-policy` | HIGH | some users are matched by no global session policy rule |
 | `single-factor-rule` | MEDIUM | an explicit rule grants 1FA |
+| `downgrade-path` | MEDIUM | the population a stricter rule targets can, in some context (e.g. an unmanaged device), fall through to a weaker later rule |
 | `shadowed-rule` / `unsatisfiable-conditions` | MEDIUM/LOW/INFO | a rule can never apply (with the minimal set of earlier rules that cover it) |
 | `policy-fall-through`, `shadowed-policy` | MEDIUM | a global session / enrollment policy applies to users it has no rule for, or never decides |
 | `inactive-policy-mapped`, `missing-catch-all` | MEDIUM | structural anomalies |
@@ -173,6 +183,7 @@ src/okta_policy_analyzer/
   smt/encoder.py       rule match, first-match chains, policy selection
   smt/dnf.py           projection + prime implicants
   analysis.py          analyses and findings
+  diff.py              formal snapshot diff
   assertions.py        YAML assertions
   interpreter.py       concrete reference interpreter
   tla.py               TLA+ export + TLC runner

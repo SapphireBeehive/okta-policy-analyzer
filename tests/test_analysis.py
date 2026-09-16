@@ -144,3 +144,71 @@ def test_combined_rows_and_json(result: AnalysisResult) -> None:
     assert d["stats"]["authentication_policies"] == 5
     assert d["authentication_policies"][0]["rules"][0]["name"]
     assert any(a.startswith("a managed device") for a in d["assumptions"])
+
+
+def test_parallel_matches_serial(acme_snapshot) -> None:
+    serial = Analyzer.from_snapshot(acme_snapshot).run()
+    parallel = Analyzer.from_snapshot(acme_snapshot).run(jobs=2)
+    assert sorted(f.title for f in serial.findings) == sorted(f.title for f in parallel.findings)
+    assert [a.policy.id for a in serial.access] == [a.policy.id for a in parallel.access]
+    assert [a.weakest for a in serial.access] == [a.weakest for a in parallel.access]
+
+
+def test_downgrade_path_detected() -> None:
+    from okta_policy_analyzer.loader import load_tenant
+    from okta_policy_analyzer.okta.snapshot import Snapshot
+
+    from .fixtures.acme import (
+        DENY,
+        TWO_FA_ANY,
+        TWO_FA_PHISHING_RESISTANT,
+        _people,
+        _policy,
+        _rule,
+        build_acme,
+    )
+
+    snap = build_acme()
+    pol = _policy(
+        "rst_dg",
+        "Downgrade policy",
+        "ACCESS_POLICY",
+        9,
+        [
+            _rule(
+                "dg1",
+                "Finance on managed devices: phishing-resistant",
+                0,
+                {
+                    "people": _people(groups_include=["00g_finance"]),
+                    "device": {"registered": True, "managed": True},
+                },
+                TWO_FA_PHISHING_RESISTANT,
+            ),
+            _rule("dg2", "Service accounts denied", 1, {"people": _people(groups_include=["00g_svc"])}, DENY),
+            _rule(
+                "dg3",
+                "Catch-all Rule",
+                99,
+                {"people": _people(groups_include=["00g_everyone"])},
+                TWO_FA_ANY,
+                system=True,
+            ),
+        ],
+    )
+    snap.policies.append(pol)
+    snap.apps.append(
+        {
+            "id": "app_dg",
+            "label": "Downgrade App",
+            "status": "ACTIVE",
+            "_links": {"accessPolicy": {"href": "https://acme.okta.com/api/v1/policies/rst_dg"}},
+        }
+    )
+    res = Analyzer(load_tenant(Snapshot.from_dict(snap.to_dict()))).run()
+    dg = [f for f in res.findings if f.kind == "downgrade-path" and f.policy == "Downgrade policy"]
+    assert len(dg) == 1
+    f = dg[0]
+    assert f.data["stricter_rule"].startswith("Finance on managed") and f.rule == "Catch-all Rule"
+    assert any("Finance" in w for w in f.who)
+    assert any("not managed" in w or "not registered" in w for w in f.data["when"])

@@ -339,10 +339,14 @@ class Analyzer:
         self.findings.append(finding)
 
     # ------------------------------------------------------------------------------ main
-    def run(self) -> AnalysisResult:
+    def run(self, *, jobs: int = 1) -> AnalysisResult:
+        """Run every analysis. With ``jobs > 1`` authentication policies are analysed in worker processes."""
         t0 = time.time()
         t = self.t
-        access = [self._analyse_access_policy(ep) for ep in self._access]
+        if jobs > 1 and len(self._access) > 1:
+            access = self._run_access_parallel(jobs)
+        else:
+            access = [self._analyse_access_policy(ep) for ep in self._access]
         session = self._analyse_family(self._session, "global session policy")
         enrollment = self._analyse_family(self._enroll, "enrollment policy")
         self._session_findings()
@@ -387,6 +391,41 @@ class Analyzer:
             stats=stats,
             apps_without_policy=apps_without,
         )
+
+    def _run_access_parallel(self, jobs: int) -> list[AccessPolicyAnalysis]:
+        """Analyse authentication policies in processes; each worker rebuilds the model from the snapshot."""
+        from concurrent.futures import ProcessPoolExecutor
+
+        from .okta.snapshot import Snapshot
+
+        snap_dict = self._snapshot_dict
+        if snap_dict is None:
+            raise RuntimeError(
+                "parallel analysis needs the snapshot; construct the Analyzer via Analyzer.from_snapshot()"
+            )
+        ids = [ep.policy.id for ep in self._access]
+        chunks = [ids[i::jobs] for i in range(jobs) if ids[i::jobs]]
+        results: dict[str, AccessPolicyAnalysis] = {}
+        findings: list[Finding] = []
+        with ProcessPoolExecutor(max_workers=len(chunks)) as pool:
+            for out in pool.map(_analyse_chunk, [(snap_dict, self.opt, chunk) for chunk in chunks]):
+                for a in out["access"]:
+                    results[a.policy.id] = a
+                findings.extend(out["findings"])
+                self._queries += out["queries"]
+        self.findings.extend(findings)
+        _ = Snapshot
+        return [results[i] for i in ids if i in results]
+
+    _snapshot_dict: dict[str, Any] | None = None
+
+    @classmethod
+    def from_snapshot(cls, snapshot: Any, options: AnalysisOptions | None = None) -> Analyzer:
+        from .loader import load_tenant
+
+        an = cls(load_tenant(snapshot), options)
+        an._snapshot_dict = snapshot.to_dict()
+        return an
 
     # ------------------------------------------------------------------------------ authentication policies
     def _analyse_access_policy(self, ep: EncodedPolicy) -> AccessPolicyAnalysis:
@@ -437,6 +476,7 @@ class Analyzer:
                     )
             rules.append(analysis)
         self._deny_bypass_findings(ep, rules, labels)
+        self._downgrade_findings(ep, rules, labels)
         self._weak_default_finding(ep, rules, labels)
         self._lint_rules(ep, labels)
         outcomes, weakest, weakest_witness = self._outcomes(ep, rules)
@@ -563,6 +603,46 @@ class Analyzer:
                     data={"bypassing_rules": names, "when": self.lines(self.when(f))},
                 )
             )
+
+    def _downgrade_findings(self, ep: EncodedPolicy, rules: list[RuleAnalysis], labels: list[str]) -> None:
+        """The population a stricter rule targets can, in some context, be decided by a weaker later rule.
+
+        Example: "Finance -> phishing-resistant" followed by a catch-all "anyone -> 2FA": a Finance user whose
+        context misses the first rule (e.g. the rule also requires a managed device) silently gets the weaker
+        requirement. Reported once per (stricter rule, weaker rule) pair with the WHEN projection.
+        """
+        for i, stricter in enumerate(rules):
+            if not stricter.reachable or stricter.assurance.access != Access.ALLOW:
+                continue
+            people_i = self.enc.people(stricter.rule)
+            if not self.sat(z3.Not(people_i)):
+                continue  # rule targets everyone: nothing population-specific to downgrade
+            for j in range(i + 1, len(rules)):
+                weaker = rules[j]
+                if not weaker.reachable or weaker.assurance.access != Access.ALLOW:
+                    continue
+                if weaker.strength >= stricter.strength:
+                    continue
+                f = z3.And(people_i, ep.effective[j])
+                if not self.sat(f):
+                    continue
+                self.add(
+                    Finding(
+                        "MEDIUM",
+                        "downgrade-path",
+                        f"Users targeted by {stricter.rule.name!r} ({stricter.assurance.label}) can fall through to "
+                        f"{weaker.rule.name!r} ({weaker.assurance.label})",
+                        "In the contexts below the stricter rule does not match, so its population is decided by a weaker "
+                        "later rule. If the stricter requirement is meant unconditionally, drop the extra conditions or add "
+                        "a DENY for the remaining contexts.",
+                        policy=ep.policy.name,
+                        rule=weaker.rule.name,
+                        apps=labels,
+                        who=self.lines(self.who(f)),
+                        witness=self.witness_text(f),
+                        data={"when": self.lines(self.when(f)), "stricter_rule": stricter.rule.name},
+                    )
+                )
 
     def _weak_default_finding(self, ep: EncodedPolicy, rules: list[RuleAnalysis], labels: list[str]) -> None:
         for ra in rules:
@@ -958,6 +1038,18 @@ class Analyzer:
 
 
 # ------------------------------------------------------------------------------------------ helpers
+
+
+def _analyse_chunk(args: tuple[dict[str, Any], AnalysisOptions, list[str]]) -> dict[str, Any]:
+    """Worker: analyse a subset of authentication policies (module-level so it can be pickled)."""
+    from .loader import load_tenant
+    from .okta.snapshot import Snapshot
+
+    snap_dict, options, policy_ids = args
+    an = Analyzer(load_tenant(Snapshot.from_dict(snap_dict)), options)
+    wanted = set(policy_ids)
+    access = [an._analyse_access_policy(ep) for ep in an._access if ep.policy.id in wanted]
+    return {"access": access, "findings": an.findings, "queries": an._queries}
 
 
 def _action_signature(rule: Rule) -> str:

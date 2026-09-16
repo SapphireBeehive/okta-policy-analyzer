@@ -29,6 +29,13 @@ def _load_tenant(path: str):
     return load_tenant(Snapshot.load(path))
 
 
+def _analyzer(args: argparse.Namespace):
+    from .analysis import Analyzer
+    from .okta.snapshot import Snapshot
+
+    return Analyzer.from_snapshot(Snapshot.load(args.snapshot), _options(args))
+
+
 def _options(args: argparse.Namespace):
     import yaml
 
@@ -88,13 +95,11 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 
 
 def cmd_analyze(args: argparse.Namespace) -> int:
-    from .analysis import Analyzer
     from .assertions import AssertionChecker, load_assertions
     from .report import findings_summary, render_console, render_markdown
 
-    tenant = _load_tenant(args.snapshot)
-    analyzer = Analyzer(tenant, _options(args))
-    result = analyzer.run()
+    analyzer = _analyzer(args)
+    result = analyzer.run(jobs=max(1, args.jobs))
     assertions = None
     if args.assertions:
         assertions = AssertionChecker(analyzer).check_all(load_assertions(args.assertions))
@@ -362,6 +367,48 @@ def cmd_simulate_validate(args: argparse.Namespace) -> int:
     return rc
 
 
+def cmd_diff(args: argparse.Namespace) -> int:
+    """Compare two snapshots: which apps became more or less permissive, for whom."""
+    from .diff import diff_tenants
+
+    old = _load_tenant(args.old)
+    new = _load_tenant(args.new)
+    res = diff_tenants(old, new, _options(args))
+    if args.format == "json":
+        _emit(res.to_json(), args.output)
+    else:
+        lines: list[str] = [
+            f"Snapshot diff: {res.old_fetched_at or args.old}  →  {res.new_fetched_at or args.new}",
+            "",
+        ]
+        for a in res.apps:
+            lines.append(
+                f"{a.app}: {a.verdict}  (policy {a.old_policy!r} → {a.new_policy!r}; weakest {a.old_weakest} → {a.new_weakest})"
+            )
+            for w in a.new_access:
+                lines.append(f"    + new access:   {w}")
+            for w in a.weaker:
+                lines.append(f"    ~ weaker auth:  {w}")
+            for w in a.lost_access:
+                lines.append(f"    - lost access:  {w}")
+            for w in a.stronger:
+                lines.append(f"    ^ stronger auth: {w}")
+            if a.witness_new_access:
+                lines.append(f"    witness (new access): {a.witness_new_access}")
+            elif a.witness_weaker:
+                lines.append(f"    witness (weaker): {a.witness_weaker}")
+            for c in a.rule_changes:
+                lines.append(f"    rule {c.kind}: {c.rule}{' — ' + c.detail if c.detail else ''}")
+        if res.apps_added:
+            lines.append("apps added: " + ", ".join(res.apps_added))
+        if res.apps_removed:
+            lines.append("apps removed: " + ", ".join(res.apps_removed))
+        lines.append("")
+        lines.append("assumptions: " + "; ".join(res.assumptions))
+        _emit("\n".join(lines), args.output)
+    return 1 if (args.fail_on_more_permissive and res.more_permissive) else 0
+
+
 # ------------------------------------------------------------------------------------------ helpers
 
 
@@ -457,6 +504,9 @@ def build_parser() -> argparse.ArgumentParser:
             "--combined-who",
             action="store_true",
             help="describe WHO for every session-rule × app-rule pair (slow)",
+        )
+        sp.add_argument(
+            "-j", "--jobs", type=int, default=1, help="analyse authentication policies in N worker processes"
         )
 
     a = sub.add_parser("analyze", help="analyze a snapshot: who can do what, findings, assertions")
