@@ -96,6 +96,7 @@ _PLATFORM_ALIASES = {
     "ANDROID": DevicePlatform.ANDROID,
     "WINDOWS": DevicePlatform.WINDOWS,
     "CHROMEOS": DevicePlatform.CHROMEOS,
+    "LINUX": DevicePlatform.LINUX,
     "OTHER": DevicePlatform.OTHER,
 }
 
@@ -450,7 +451,9 @@ class TenantLoader:
         if vtype == VerificationType.ASSURANCE:
             fm = str(v.get("factorMode") or "2FA").upper()
             vm.factor_mode = FactorMode.ONE_FA if fm == "1FA" else FactorMode.TWO_FA
-            for cs in v.get("constraints") or []:
+            for cs in _as_list(v.get("constraints")):
+                if not isinstance(cs, dict):
+                    continue
                 vm.constraints.append(
                     ConstraintSet(
                         knowledge=_constraint("KNOWLEDGE", cs.get("knowledge")),
@@ -527,22 +530,50 @@ class TenantLoader:
 # ------------------------------------------------------------------------------------------ helpers
 
 
+_CONSTRAINT_KEYS = {
+    "types",
+    "methods",
+    "authenticationmethods",
+    "excludedauthenticationmethods",
+    "required",
+    "reauthenticatein",
+    "devicebound",
+    "hardwareprotection",
+    "phishingresistant",
+    "userpresence",
+    "userverification",
+}
+
+
+def _as_list(value: Any) -> list[Any]:
+    """Okta examples sometimes show a bare object where the live API returns an array."""
+    if value is None:
+        return []
+    return list(value) if isinstance(value, list) else [value]
+
+
 def _constraint(kind: str, c: dict[str, Any] | None) -> Constraint | None:
     if not c:
         return None
+    # match keys case-insensitively (the spec itself contains the typo ``phishingREsistant``)
+    norm = {str(k).lower(): v for k, v in c.items() if str(k).lower() in _CONSTRAINT_KEYS}
+    excluded = _pairs(_as_list(norm.get("excludedauthenticationmethods")))
+    required = norm.get("required")
+    if required is None:
+        required = not excluded  # documented default: false only when excluded methods are given
     return Constraint(
         kind=kind,
-        types=[str(x).upper() for x in c.get("types") or []],
-        methods=[str(x).upper() for x in c.get("methods") or []],
-        authentication_methods=_pairs(c.get("authenticationMethods")),
-        excluded_authentication_methods=_pairs(c.get("excludedAuthenticationMethods")),
-        required=bool(c.get("required", True)),
-        reauthenticate_in=c.get("reauthenticateIn"),
-        device_bound=_requirement(c.get("deviceBound"), Requirement.OPTIONAL),
-        hardware_protection=_requirement(c.get("hardwareProtection"), Requirement.OPTIONAL),
-        phishing_resistant=_requirement(c.get("phishingResistant"), Requirement.OPTIONAL),
-        user_presence=_requirement(c.get("userPresence"), Requirement.REQUIRED),
-        user_verification=_requirement(c.get("userVerification"), Requirement.OPTIONAL),
+        types=[str(x).upper() for x in norm.get("types") or []],
+        methods=[str(x).upper() for x in norm.get("methods") or []],
+        authentication_methods=_pairs(_as_list(norm.get("authenticationmethods"))),
+        excluded_authentication_methods=excluded,
+        required=bool(required),
+        reauthenticate_in=norm.get("reauthenticatein"),
+        device_bound=_requirement(norm.get("devicebound"), Requirement.OPTIONAL),
+        hardware_protection=_requirement(norm.get("hardwareprotection"), Requirement.OPTIONAL),
+        phishing_resistant=_requirement(norm.get("phishingresistant"), Requirement.OPTIONAL),
+        user_presence=_requirement(norm.get("userpresence"), Requirement.REQUIRED),
+        user_verification=_requirement(norm.get("userverification"), Requirement.OPTIONAL),
     )
 
 

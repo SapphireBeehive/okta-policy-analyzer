@@ -1,0 +1,34 @@
+# Authenticator / method characteristics used to decide which concrete authenticators satisfy an
+# authentication-policy constraint. Adapted from Okta's "Authenticator characteristics" documentation
+# (Identity Engine > Authenticators). Override any entry with --authenticator-overrides <yaml>.
+#
+# factor_type:        KNOWLEDGE | POSSESSION
+# constraint_type:    value of the constraint "types" enum this method belongs to
+# constraint_method:  value of the constraint "methods" enum this method belongs to
+# phishing_resistant / device_bound / hardware_protected / user_presence: fixed characteristics
+# user_verification:  the method can provide user verification (biometric/PIN), which Okta counts as a
+#                     second factor type (inherence/knowledge) when combined with the possession factor
+# hardware_protected may be "conditional" (depends on the device having a TPM/Secure Enclave, or on a FIDO2
+# credential being a roaming/hardware key rather than a synced passkey). A conditional method satisfies a
+# hardwareProtection=REQUIRED constraint (Okta enforces the property at runtime) but is not counted as
+# hardware-protected when classifying the weakest path of a rule that does not require it.
+methods:
+  - {key: okta_password,     method: password,          factor_type: KNOWLEDGE,  constraint_type: PASSWORD,          constraint_method: PASSWORD,          phishing_resistant: false, device_bound: false, hardware_protected: false, user_presence: true,  user_verification: false}
+  - {key: security_question, method: security_question, factor_type: KNOWLEDGE,  constraint_type: SECURITY_QUESTION, constraint_method: SECURITY_QUESTION, phishing_resistant: false, device_bound: false, hardware_protected: false, user_presence: true,  user_verification: false}
+  - {key: okta_email,        method: email,             factor_type: POSSESSION, constraint_type: EMAIL,             constraint_method: EMAIL,             phishing_resistant: false, device_bound: false, hardware_protected: false, user_presence: true,  user_verification: false}
+  - {key: phone_number,      method: sms,               factor_type: POSSESSION, constraint_type: PHONE,             constraint_method: SMS,               phishing_resistant: false, device_bound: false, hardware_protected: false, user_presence: true,  user_verification: false}
+  - {key: phone_number,      method: voice,             factor_type: POSSESSION, constraint_type: PHONE,             constraint_method: VOICE,             phishing_resistant: false, device_bound: false, hardware_protected: false, user_presence: true,  user_verification: false}
+  - {key: okta_verify,       method: push,              factor_type: POSSESSION, constraint_type: APP,               constraint_method: PUSH,              phishing_resistant: false, device_bound: true,  hardware_protected: conditional, user_presence: true, user_verification: true}
+  - {key: okta_verify,       method: totp,              factor_type: POSSESSION, constraint_type: APP,               constraint_method: TOTP,              phishing_resistant: false, device_bound: true,  hardware_protected: false, user_presence: true,  user_verification: false}
+  - {key: okta_verify,       method: signed_nonce,      factor_type: POSSESSION, constraint_type: APP,               constraint_method: SIGNED_NONCE,      phishing_resistant: true,  device_bound: true,  hardware_protected: conditional, user_presence: true, user_verification: true, display: "Okta FastPass"}
+  - {key: webauthn,          method: webauthn,          factor_type: POSSESSION, constraint_type: SECURITY_KEY,      constraint_method: WEBAUTHN,          phishing_resistant: true,  device_bound: true,  hardware_protected: conditional,  user_presence: true,  user_verification: true, display: "FIDO2 (WebAuthn)"}
+  - {key: smart_card_idp,    method: cert,              factor_type: POSSESSION, constraint_type: FEDERATED,         constraint_method: CERT,              phishing_resistant: true,  device_bound: true,  hardware_protected: true,  user_presence: true,  user_verification: true, display: "Smart Card (PIV/CAC)"}
+  - {key: external_idp,      method: idp,               factor_type: POSSESSION, constraint_type: FEDERATED,         constraint_method: IDP,               phishing_resistant: false, device_bound: false, hardware_protected: false, user_presence: true,  user_verification: false}
+  - {key: google_otp,        method: otp,               factor_type: POSSESSION, constraint_type: APP,               constraint_method: OTP,               phishing_resistant: false, device_bound: true,  hardware_protected: false, user_presence: true,  user_verification: false}
+  - {key: custom_otp,        method: otp,               factor_type: POSSESSION, constraint_type: APP,               constraint_method: OTP,               phishing_resistant: false, device_bound: true,  hardware_protected: false, user_presence: true,  user_verification: false}
+  - {key: onprem_mfa,        method: otp,               factor_type: POSSESSION, constraint_type: APP,               constraint_method: OTP,               phishing_resistant: false, device_bound: false, hardware_protected: false, user_presence: true,  user_verification: false}
+  - {key: symantec_vip,      method: otp,               factor_type: POSSESSION, constraint_type: APP,               constraint_method: OTP,               phishing_resistant: false, device_bound: false, hardware_protected: false, user_presence: true,  user_verification: false}
+  - {key: yubikey_token,     method: otp,               factor_type: POSSESSION, constraint_type: APP,               constraint_method: OTP,               phishing_resistant: false, device_bound: true,  hardware_protected: true,  user_presence: true,  user_verification: false}
+  - {key: duo,               method: duo,               factor_type: POSSESSION, constraint_type: APP,               constraint_method: DUO,               phishing_resistant: false, device_bound: true,  hardware_protected: false, user_presence: true,  user_verification: false}
+  - {key: custom_app,        method: push,              factor_type: POSSESSION, constraint_type: APP,               constraint_method: PUSH,              phishing_resistant: false, device_bound: true,  hardware_protected: conditional, user_presence: true, user_verification: true}
+  - {key: tac,               method: tac,               factor_type: KNOWLEDGE,  constraint_type: APP,               constraint_method: OTP,               phishing_resistant: false, device_bound: false, hardware_protected: false, user_presence: true,  user_verification: false, display: "Temporary Access Code"}

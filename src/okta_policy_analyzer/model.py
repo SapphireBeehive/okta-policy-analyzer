@@ -71,6 +71,7 @@ class DevicePlatform(StrEnum):
     MACOS = "MACOS"
     WINDOWS = "WINDOWS"
     CHROMEOS = "CHROMEOS"
+    LINUX = "LINUX"
     OTHER = "OTHER"
 
 
