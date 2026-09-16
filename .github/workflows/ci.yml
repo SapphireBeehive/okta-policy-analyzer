@@ -14,9 +14,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
       - name: Install
         run: pip install -e ".[dev]"
+      - name: Fetch TLA+ tools (for the TLC cross-check)
+        run: curl -sSL -o tla2tools.jar https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar
       - name: Lint
-        run: ruff check .
+        run: ruff check . && ruff format --check .
       - name: Test
         run: pytest -q
+        env:
+          TLA2TOOLS_JAR: ${{ github.workspace }}/tla2tools.jar
