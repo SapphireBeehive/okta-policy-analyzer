@@ -164,3 +164,44 @@ def test_fetch_snapshot_and_roundtrip(tmp_path) -> None:
     f = tmp_path / "snap.json"
     snap.save_file(f)
     assert Snapshot.load(f).to_dict() == snap.to_dict()
+
+
+def test_fetch_records_pipeline_and_aborts_on_classic() -> None:
+    def classic(req: httpx.Request) -> httpx.Response:
+        if req.url.path == "/.well-known/okta-organization":
+            return httpx.Response(200, json={"id": "00o1", "pipeline": "v1"})
+        return httpx.Response(200, json=[])
+
+    with pytest.raises(OktaAPIError) as ei:
+        fetch_snapshot(_client(classic))
+    assert "Classic Engine" in str(ei.value)
+
+    def oie(req: httpx.Request) -> httpx.Response:
+        if req.url.path == "/.well-known/okta-organization":
+            return httpx.Response(200, json={"id": "00o2", "pipeline": "idx"})
+        if req.url.path == "/api/v1/policies" and req.url.params.get("type") == "ACCESS_POLICY":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": "rst1",
+                        "type": "ACCESS_POLICY",
+                        "name": "P",
+                        "_embedded": {"rules": [], "resourceType": "APP"},
+                    }
+                ],
+            )
+        if req.url.path == "/api/v1/policies/rst1/mappings":
+            return httpx.Response(
+                200, json=[{"id": "map1", "_links": {"application": {"href": f"{ORG}/api/v1/apps/app9"}}}]
+            )
+        if req.url.path == "/api/v1/apps":
+            return httpx.Response(403, json={"errorSummary": "no apps scope"})
+        return httpx.Response(200, json=[])
+
+    snap = fetch_snapshot(_client(oie))
+    assert snap.manifest.pipeline == "idx" and snap.manifest.org_id == "00o2"
+    assert snap.policies[0]["_resourceType"] == "APP"
+    assert snap.policy_mappings == {
+        "rst1": ["app9"]
+    }  # from the mappings endpoint via _links.application.href

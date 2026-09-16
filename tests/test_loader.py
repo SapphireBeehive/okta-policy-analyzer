@@ -213,3 +213,66 @@ def test_loader_tolerates_unknown_shapes() -> None:
     assert any("unsupported condition 'mystery'" in w for w in t.warnings)
     assert any("Everyone" in w for w in t.warnings)
     assert json.dumps(t.warnings)  # serialisable
+
+
+def test_account_management_policy_is_separated_and_priority_ties_warn() -> None:
+    snap = Snapshot.from_dict(
+        {
+            "manifest": {"org_url": "https://x.okta.com", "pipeline": "idx"},
+            "groups": [{"id": "00g_all", "type": "BUILT_IN", "profile": {"name": "Everyone"}}],
+            "policies": [
+                {
+                    "id": "rst_acct",
+                    "type": "ACCESS_POLICY",
+                    "name": "Okta Account Management Policy",
+                    "priority": 1,
+                    "_resourceType": "END_USER_ACCOUNT_MANAGEMENT",
+                    "_rules": [
+                        {
+                            "id": "r0",
+                            "name": "Catch-all",
+                            "priority": 99,
+                            "system": True,
+                            "actions": {"appSignOn": {"access": "ALLOW"}},
+                        }
+                    ],
+                },
+                {
+                    "id": "rst_app",
+                    "type": "ACCESS_POLICY",
+                    "name": "App",
+                    "priority": 2,
+                    "_rules": [
+                        {
+                            "id": "rb",
+                            "name": "B",
+                            "priority": 0,
+                            "created": "2024-02-01T00:00:00Z",
+                            "actions": {"appSignOn": {"access": "DENY"}},
+                        },
+                        {
+                            "id": "ra",
+                            "name": "A",
+                            "priority": 0,
+                            "created": "2024-01-01T00:00:00Z",
+                            "actions": {"appSignOn": {"access": "ALLOW"}},
+                        },
+                        {
+                            "id": "r99",
+                            "name": "Catch-all",
+                            "priority": 99,
+                            "system": True,
+                            "actions": {"appSignOn": {"access": "DENY"}},
+                        },
+                    ],
+                },
+            ],
+        }
+    )
+    t = load_tenant(snap)
+    assert [p.id for p in t.access_policies] == ["rst_app"]
+    assert [p.id for p in t.account_management_policies] == ["rst_acct"]
+    assert t.account_management_policies[0].is_account_management
+    assert [r.id for r in t.access_policies[0].rules] == ["ra", "rb", "r99"]  # tie broken by creation time
+    assert any("share priority 0" in w for w in t.warnings)
+    assert any("account management policy" in w for w in t.warnings)

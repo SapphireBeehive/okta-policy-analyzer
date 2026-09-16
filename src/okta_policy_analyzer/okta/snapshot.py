@@ -65,6 +65,10 @@ class SnapshotManifest:
     counts: dict[str, int] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     with_users: bool = False
+    pipeline: str = (
+        ""  # "idx" (Identity Engine) or "v1" (Classic Engine), from /.well-known/okta-organization
+    )
+    org_id: str = ""
 
 
 @dataclass
@@ -99,6 +103,8 @@ class Snapshot:
             counts=man.get("counts", {}),
             warnings=man.get("warnings", []),
             with_users=man.get("with_users", False),
+            pipeline=man.get("pipeline", ""),
+            org_id=man.get("org_id", ""),
         )
         snap = cls(manifest=manifest)
         for name in COLLECTIONS:
@@ -183,6 +189,19 @@ def fetch_snapshot(
             warnings.append(msg)
             return default
 
+    # --- engine detection (public endpoint) -----------------------------------------------------
+    well_known = optional("org metadata", lambda: client.get("/.well-known/okta-organization"), {}) or {}
+    snap.manifest.pipeline = str(well_known.get("pipeline") or "")
+    snap.manifest.org_id = str(well_known.get("id") or "")
+    if snap.manifest.pipeline == "v1":
+        raise OktaAPIError(
+            0,
+            client.org_url,
+            {
+                "errorSummary": "this org runs Okta Classic Engine (pipeline v1); authentication policies exist only on Identity Engine"
+            },
+        )
+
     # --- policies (required) -------------------------------------------------------------------
     for ptype in policy_types:
         params: dict[str, Any] = {"type": ptype, "expand": "rules"}
@@ -205,7 +224,9 @@ def fetch_snapshot(
                     warnings.append(f"rules for policy {pol.get('id')}: {e}")
                     rules = []
             pol["_rules"] = rules
-            pol.pop("_embedded", None)
+            emb = pol.pop("_embedded", None) or {}
+            if emb.get("resourceType"):
+                pol["_resourceType"] = emb["resourceType"]  # APP or END_USER_ACCOUNT_MANAGEMENT
             snap.policies.append(pol)
 
     # --- apps and access-policy mappings ---------------------------------------------------------
@@ -224,7 +245,7 @@ def fetch_snapshot(
                 lambda pol=pol: client.list_all(f"/api/v1/policies/{pol['id']}/mappings"),
                 [],
             )
-            ids = [m.get("resourceId") or m.get("id") for m in maps if isinstance(m, dict)]
+            ids = [_mapping_app_id(m) for m in maps if isinstance(m, dict)]
             mappings[pol["id"]] = [i for i in ids if i]
     snap.policy_mappings = mappings
 
@@ -272,6 +293,14 @@ def fetch_snapshot(
     snap.manifest.warnings = warnings
     snap.manifest.counts = snap._counts()
     return snap
+
+
+def _mapping_app_id(mapping: dict[str, Any]) -> str | None:
+    """Policy mappings carry the app only as ``_links.application.href``."""
+    href = ((mapping.get("_links") or {}).get("application") or {}).get("href")
+    if href:
+        return href.rstrip("/").rsplit("/", 1)[-1]
+    return mapping.get("resourceId")
 
 
 def _embedded_rules(policy: dict[str, Any]) -> list[dict[str, Any]] | None:

@@ -402,11 +402,18 @@ class Policy:
     description: str = ""
     app_ids: list[str] = field(default_factory=list)  # ACCESS_POLICY: apps governed by this policy
     authenticator_settings: list[AuthenticatorSetting] = field(default_factory=list)  # MFA_ENROLL
+    resource_type: str = (
+        "APP"  # ACCESS_POLICY: APP, or END_USER_ACCOUNT_MANAGEMENT (Okta account management policy)
+    )
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @property
     def is_active(self) -> bool:
         return self.status == Status.ACTIVE
+
+    @property
+    def is_account_management(self) -> bool:
+        return self.type == PolicyType.ACCESS_POLICY and self.resource_type == "END_USER_ACCOUNT_MANAGEMENT"
 
     def active_rules(self) -> list[Rule]:
         return [r for r in self.rules if r.is_active]
@@ -432,6 +439,7 @@ class Tenant:
     session_policies: list[Policy] = field(default_factory=list)  # priority order
     enrollment_policies: list[Policy] = field(default_factory=list)  # priority order
     password_policies: list[Policy] = field(default_factory=list)
+    account_management_policies: list[Policy] = field(default_factory=list)  # Okta account management policy
     other_policies: list[Policy] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -455,6 +463,7 @@ class Tenant:
             *self.session_policies,
             *self.enrollment_policies,
             *self.password_policies,
+            *self.account_management_policies,
             *self.other_policies,
         ]
 

@@ -326,6 +326,41 @@ def cmd_export_tla(args: argparse.Namespace) -> int:
     return rc
 
 
+def cmd_simulate_validate(args: argparse.Namespace) -> int:
+    """Compare the encoder with Okta's policy simulation API on sampled worlds (needs API access)."""
+    from .analysis import Analyzer
+    from .okta.client import OktaClient
+    from .okta.simulate import validate_app
+
+    tenant = _load_tenant(args.snapshot)
+    token = os.environ.get(args.token_env) if args.token_env else None
+    bearer = os.environ.get(args.bearer_env) if args.bearer_env else None
+    if not token and not bearer:
+        print(f"error: set the API token in ${args.token_env} or ${args.bearer_env}", file=sys.stderr)
+        return 2
+    an = Analyzer(tenant, _options(args))
+    apps = [
+        a
+        for a in tenant.apps.values()
+        if (not args.app or a.label == args.app or a.id == args.app) and a.access_policy_id
+    ]
+    rc = 0
+    with OktaClient(args.org or tenant.org_url, api_token=token, bearer_token=bearer) as client:
+        for app in sorted(apps, key=lambda a: a.label):
+            rep = validate_app(an, client, app, samples=args.samples, seed=args.seed)
+            status = "OK" if rep.ok else f"{len(rep.mismatches)} MISMATCH(ES)"
+            print(
+                f"{app.label}: {rep.compared} verdicts compared from {rep.samples} sampled worlds; skipped {rep.skipped_not_assigned} unassigned, {rep.skipped_unsupported} undefined → {status}"
+            )
+            for m in rep.mismatches:
+                rc = 1
+                print(
+                    f"  {m.policy_type}: expected {m.expected_policy}/{m.expected_rule}, Okta says {m.okta_policy}/{m.okta_rule}"
+                )
+                print(f"    request: {json.dumps(m.request)}")
+    return rc
+
+
 # ------------------------------------------------------------------------------------------ helpers
 
 

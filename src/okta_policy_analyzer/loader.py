@@ -233,6 +233,9 @@ class TenantLoader:
         # ---------------------------------------------------------------------- policies
         for p in self.snap.policies:
             pol = self._policy(p)
+            if pol.is_account_management:
+                t.account_management_policies.append(pol)
+                continue
             bucket = {
                 PolicyType.ACCESS_POLICY: t.access_policies,
                 PolicyType.OKTA_SIGN_ON: t.session_policies,
@@ -284,7 +287,17 @@ class TenantLoader:
         groups_include = list((((cond.get("people") or {}).get("groups") or {}).get("include")) or [])
         rules = [self._rule(r, ptype, p["id"]) for r in (p.get("_rules") or [])]
         # Evaluation order: ascending priority; the Okta-created catch-all (system=true) is always last.
-        rules.sort(key=lambda r: (r.system, r.priority, r.name))
+        # Ties are not documented by Okta: break them deterministically (creation time, then id) and warn.
+        rules.sort(key=lambda r: (r.system, r.priority, str(r.raw.get("created") or ""), r.id))
+        seen: dict[int, str] = {}
+        for r in rules:
+            if r.is_active and not r.system:
+                if r.priority in seen:
+                    self.warn(
+                        f"policy {p.get('name')!r}: rules {seen[r.priority]!r} and {r.name!r} share priority {r.priority}; "
+                        "evaluation order between them is undocumented"
+                    )
+                seen.setdefault(r.priority, r.name)
         pol = Policy(
             id=p["id"],
             name=p.get("name") or p["id"],
@@ -295,8 +308,16 @@ class TenantLoader:
             rules=rules,
             group_include=groups_include,
             description=p.get("description") or "",
+            resource_type=str(
+                p.get("_resourceType") or ((p.get("_embedded") or {}).get("resourceType")) or "APP"
+            ),
             raw=p,
         )
+        if pol.is_account_management:
+            self.warn(
+                f"policy {pol.name!r} is the Okta account management policy (self-service account flows); "
+                "it is analysed separately from app sign-in policies"
+            )
         if ptype == PolicyType.MFA_ENROLL:
             settings = p.get("settings") or {}
             for a in settings.get("authenticators") or []:
@@ -525,6 +546,10 @@ class TenantLoader:
     # ------------------------------------------------------------------------------ checks
     def _sanity_checks(self) -> None:
         t = self.tenant
+        if self.snap.manifest.pipeline == "v1":
+            self.warn(
+                "snapshot comes from a Classic Engine org (pipeline v1); authentication policies are an Identity Engine feature"
+            )
         if not t.access_policies:
             self.warn(
                 "no ACCESS_POLICY policies found: this looks like a Classic Engine org or the token lacks okta.policies.read"
