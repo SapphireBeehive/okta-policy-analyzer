@@ -212,3 +212,25 @@ def test_downgrade_path_detected() -> None:
     assert f.data["stricter_rule"].startswith("Finance on managed") and f.rule == "Catch-all Rule"
     assert any("Finance" in w for w in f.who)
     assert any("not managed" in w or "not registered" in w for w in f.data["when"])
+
+
+def test_group_view_fix_hints_and_executive_line(result: AnalysisResult) -> None:
+    cells = {(c.group, c.policy): c for c in result.group_view}
+    assert cells[("Contractors", "Okta Admin Console policy")].weakest == Strength.DENY
+    admins = cells[("Okta Administrators", "Okta Admin Console policy")]
+    assert admins.weakest == Strength.TWO_FA_PHISHING_RESISTANT and admins.rule == "Admins phishing-resistant"
+    # a Finance member who is also an executive (and a contractor, or of another user type) falls to the 2FA rule
+    fin = cells[("Finance", "Payroll policy")]
+    assert fin.weakest == Strength.TWO_FA and fin.rule == "Executives"
+    assert fin.strongest == Strength.TWO_FA_PHISHING_RESISTANT
+    assert (
+        cells[("Contractors", "Standard apps policy")].weakest == Strength.TWO_FA
+    )  # via corp/VPN or managed device
+    wk = result.weakest_overall
+    assert wk is not None and wk[0] == Strength.ONE_FA_KNOWLEDGE
+    bypass = next(
+        f for f in result.findings if f.kind == "deny-bypassed" and f.rule == "Contractors elsewhere denied"
+    )
+    assert bypass.data["fix_hint"] and bypass.data["fix_hint"].startswith("if ")
+    d = result.to_dict()
+    assert d["group_view"] and {"group", "policy", "weakest", "strongest", "rule"} <= set(d["group_view"][0])

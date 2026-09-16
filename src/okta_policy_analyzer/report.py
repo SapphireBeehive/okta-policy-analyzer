@@ -40,6 +40,18 @@ def render_markdown(result: AnalysisResult, assertions: list[AssertionResult] | 
         f"{s['solver_queries']} solver queries in {s['seconds']}s"
     )
     w("")
+    wk = result.weakest_overall
+    if wk is not None:
+        strength, a = wk
+        w(
+            f"**Weakest way into any app:** {strength.label} — {', '.join(a.app_labels) or a.policy.name}"
+            + (f" ({a.weakest_witness})" if a.weakest_witness else "")
+        )
+        w("")
+    from .report import findings_summary as _fs
+
+    w(f"Findings: {_fs(result.findings)}")
+    w("")
     # ---- findings
     w("## Findings")
     w("")
@@ -75,7 +87,38 @@ def render_markdown(result: AnalysisResult, assertions: list[AssertionResult] | 
                 w(_bullets(when, "    "))
             if f.witness:
                 w(f"  Witness: {f.witness}")
+            hint = f.data.get("fix_hint") if f.data else None
+            if hint:
+                w(f"  Fix hint: the intended rule would apply {hint}.")
             w("")
+    # ---- group view
+    if result.group_view:
+        w("## Group view (weakest / strongest outcome members of each group can obtain)")
+        w("")
+        policies = []
+        for c in result.group_view:
+            if c.policy not in policies:
+                policies.append(c.policy)
+        groups = []
+        for c in result.group_view:
+            if c.group not in groups:
+                groups.append(c.group)
+        w("| group | " + " | ".join(_md_escape(p) for p in policies) + " |")
+        w("|---|" + "---|" * len(policies))
+        cells = {(c.group, c.policy): c for c in result.group_view}
+        for g in groups:
+            row = []
+            for pol in policies:
+                c = cells.get((g, pol))
+                row.append(
+                    "—"
+                    if c is None
+                    else (
+                        f"{c.weakest.label}" + (f" … {c.strongest.label}" if c.strongest != c.weakest else "")
+                    )
+                )
+            w(f"| {_md_escape(g)} | " + " | ".join(_md_escape(x) for x in row) + " |")
+        w("")
     # ---- assertions
     if assertions is not None:
         w("## Assertions")
@@ -256,6 +299,12 @@ def render_console(
             title="okta-policy-analyzer",
         )
     )
+    wk = result.weakest_overall
+    if wk is not None:
+        strength, a = wk
+        console.print(
+            f"[bold]Weakest way into any app:[/bold] {strength.label} — {', '.join(a.app_labels) or a.policy.name}"
+        )
     # findings
     by_sev = result.findings_by_severity()
     for sev, color in (("HIGH", "red"), ("MEDIUM", "dark_orange"), ("LOW", "yellow"), ("INFO", "blue")):
@@ -284,6 +333,9 @@ def render_console(
                 console.print(f"    [magenta]when:[/magenta] {line}")
             if f.witness:
                 console.print(f"    [green]witness:[/green] {f.witness}")
+            hint = (f.data or {}).get("fix_hint")
+            if hint:
+                console.print(f"    [bold]fix hint:[/bold] the intended rule would apply {hint}")
     if not verbose and by_sev.get("INFO"):
         console.print(f"\n[dim]{len(by_sev['INFO'])} INFO findings hidden (use --verbose)[/dim]")
     # assertions
@@ -383,6 +435,61 @@ def render_console(
         console.print("\n[bold]Modelling assumptions[/bold]")
         for a_ in result.assumptions:
             console.print(f"  - {a_}")
+
+
+def render_sarif(result: AnalysisResult) -> str:
+    """SARIF 2.1.0 for code-scanning integrations (one result per finding; locations point at the snapshot)."""
+    import json
+
+    level = {"HIGH": "error", "MEDIUM": "warning", "LOW": "note", "INFO": "note"}
+    rules: dict[str, dict] = {}
+    results = []
+    for f in result.findings:
+        rules.setdefault(
+            f.kind,
+            {
+                "id": f.kind,
+                "shortDescription": {"text": f.kind},
+                "defaultConfiguration": {"level": level.get(f.severity, "note")},
+            },
+        )
+        message = f.title + "\n" + f.detail
+        if f.who:
+            message += "\nWho: " + "; ".join(f.who)
+        if f.witness:
+            message += "\nWitness: " + f.witness
+        results.append(
+            {
+                "ruleId": f.kind,
+                "level": level.get(f.severity, "note"),
+                "message": {"text": message},
+                "properties": {
+                    "severity": f.severity,
+                    "policy": f.policy,
+                    "rule": f.rule,
+                    "apps": f.apps,
+                    **{k: v for k, v in (f.data or {}).items() if isinstance(v, str | list)},
+                },
+            }
+        )
+    sarif = {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "okta-policy-analyzer",
+                        "informationUri": "https://github.com/sapphirebeehive/okta-policy-analyzer",
+                        "rules": list(rules.values()),
+                    }
+                },
+                "results": results,
+                "properties": {"org": result.org_url, "fetched_at": result.fetched_at, "stats": result.stats},
+            }
+        ],
+    }
+    return json.dumps(sarif, indent=2, ensure_ascii=False)
 
 
 def findings_summary(findings: list[Finding]) -> str:

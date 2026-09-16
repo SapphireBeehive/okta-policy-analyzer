@@ -32,6 +32,8 @@ class AnalysisOptions:
     full_cubes: bool = True  # also compute joint who+context cubes per rule (bounded)
     full_cube_limit: int = 12
     combined_who: bool = False  # WHO descriptions for every session-rule × app-rule pair (expensive)
+    group_view: bool = True  # weakest/strongest outcome per referenced group per policy
+    group_view_limit: int = 40
 
 
 @dataclass
@@ -199,6 +201,26 @@ class FamilyPolicy:
 
 
 @dataclass
+class GroupCell:
+    group: str
+    policy: str
+    apps: list[str]
+    weakest: Strength  # weakest outcome a member of the group can obtain (DENY = members can only be denied)
+    strongest: Strength
+    rule: str  # rule delivering the weakest outcome
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "group": self.group,
+            "policy": self.policy,
+            "apps": self.apps,
+            "weakest": self.weakest.name,
+            "strongest": self.strongest.name,
+            "rule": self.rule,
+        }
+
+
+@dataclass
 class AnalysisResult:
     org_url: str
     fetched_at: str
@@ -210,6 +232,15 @@ class AnalysisResult:
     warnings: list[str]
     stats: dict[str, Any]
     apps_without_policy: list[str]
+    group_view: list[GroupCell] = field(default_factory=list)
+
+    @property
+    def weakest_overall(self) -> tuple[Strength, AccessPolicyAnalysis] | None:
+        allowed = [a for a in self.access if a.weakest > Strength.NO_PATH]
+        if not allowed:
+            return None
+        a = min(allowed, key=lambda x: x.weakest)
+        return a.weakest, a
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -221,6 +252,7 @@ class AnalysisResult:
             "global_session_policies": [p.to_dict() for p in self.session],
             "enrollment_policies": [p.to_dict() for p in self.enrollment],
             "apps_without_policy": self.apps_without_policy,
+            "group_view": [c.to_dict() for c in self.group_view],
             "assumptions": self.assumptions,
             "warnings": self.warnings,
         }
@@ -335,6 +367,29 @@ class Analyzer:
         concrete: Witness = self.u.witness(m, full=True)
         return f"{minimal}  (e.g. {concrete.describe(self.t)})" if minimal else concrete.describe(self.t)
 
+    def fix_hint(self, bad: z3.BoolRef, good: z3.BoolRef) -> str | None:
+        """Contrastive explanation: one literal of a minimal witness of ``bad`` whose flip makes ``good`` hold.
+
+        ``bad`` is the situation reported (e.g. the DENY rule's population reaching an earlier ALLOW rule) and
+        ``good`` the intended one (the DENY rule deciding). The returned text reads "if <literal were different>".
+        """
+        cube = prime_implicants(bad, self.u.all_vars(), self.axioms_for(bad, good), limit=1)
+        if not cube.cubes:
+            return None
+        lits = cube.cubes[0].lits
+        ax = self.axioms_for(bad, good)
+        for lit in lits:
+            others = [x.expr() for x in lits if x is not lit]
+            s = z3.Solver()
+            s.add(*ax, *others, z3.Not(lit.expr()), good)
+            if s.check() == z3.sat:
+                return (
+                    "if " + self.u.literal_text(lit.var, lit.value, not lit.positive)
+                    if z3.is_bool(lit.var)
+                    else "if not (" + self.u.literal_text(lit.var, lit.value, lit.positive) + ")"
+                )
+        return None
+
     def add(self, finding: Finding) -> None:
         self.findings.append(finding)
 
@@ -379,6 +434,9 @@ class Analyzer:
             "solver_queries": self._queries,
             "seconds": round(time.time() - t0, 2),
         }
+        group_view = self._group_view(access) if self.opt.group_view else []
+        stats["solver_queries"] = self._queries
+        stats["seconds"] = round(time.time() - t0, 2)
         return AnalysisResult(
             org_url=t.org_url,
             fetched_at=t.fetched_at,
@@ -390,7 +448,54 @@ class Analyzer:
             warnings=list(t.warnings),
             stats=stats,
             apps_without_policy=apps_without,
+            group_view=group_view,
         )
+
+    # ------------------------------------------------------------------------------ group view
+    def _group_view(self, access: list[AccessPolicyAnalysis]) -> list[GroupCell]:
+        """For every group a rule references (bounded), the weakest and strongest outcome its members can obtain per policy."""
+        referenced: list[str] = []
+        for pol in self.t.access_policies:
+            for r in pol.rules:
+                if r.conditions.people:
+                    for g in [*r.conditions.people.groups_include, *r.conditions.people.groups_exclude]:
+                        if g in self.t.groups and g != self.u.everyone and g not in referenced:
+                            referenced.append(g)
+        if len(referenced) > self.opt.group_view_limit:
+            self.u.assumptions.append(
+                f"group view limited to the first {self.opt.group_view_limit} of {len(referenced)} referenced groups"
+            )
+            referenced = referenced[: self.opt.group_view_limit]
+        cells: list[GroupCell] = []
+        for a in access:
+            ep = self.enc.access_policy(a.policy)
+            by_rule = {ra.rule.id: ra for ra in a.rules}
+            for gid in referenced:
+                member = self.u.member[gid]
+                reachable = [(ra, ep.effective[ra.index]) for ra in a.rules if ra.reachable]
+                classes: list[tuple[Strength, RuleAnalysis]] = []
+                for ra, eff in reachable:
+                    c = ra.strength if ra.assurance.access == Access.ALLOW else Strength.DENY
+                    if self.sat(member, eff):
+                        classes.append((c, ra))
+                if not classes:
+                    continue
+                classes.sort(key=lambda x: x[0])
+                weakest_allow = next(((c, ra) for c, ra in classes if c > Strength.DENY), None)
+                weakest, rule = weakest_allow if weakest_allow else (Strength.DENY, classes[0][1])
+                strongest = max(c for c, _ in classes)
+                cells.append(
+                    GroupCell(
+                        self.t.group_name(gid),
+                        a.policy.name,
+                        a.app_labels,
+                        weakest,
+                        strongest,
+                        rule.rule.name,
+                    )
+                )
+                _ = by_rule
+        return cells
 
     def _run_access_parallel(self, jobs: int) -> list[AccessPolicyAnalysis]:
         """Analyse authentication policies in processes; each worker rebuilds the model from the snapshot."""
@@ -588,6 +693,7 @@ class Analyzer:
                 continue
             f = z3.And(ep.match[i], z3.Or(*[ep.effective[j] for j in culprits]))
             names = [ep.rules[j].name for j in culprits]
+            hint = self.fix_hint(f, ep.effective[i])
             self.add(
                 Finding(
                     "HIGH",
@@ -600,7 +706,7 @@ class Analyzer:
                     apps=labels,
                     who=self.lines(self.who(f)),
                     witness=self.witness_text(f),
-                    data={"bypassing_rules": names, "when": self.lines(self.when(f))},
+                    data={"bypassing_rules": names, "when": self.lines(self.when(f)), "fix_hint": hint},
                 )
             )
 
@@ -626,6 +732,7 @@ class Analyzer:
                 f = z3.And(people_i, ep.effective[j])
                 if not self.sat(f):
                     continue
+                hint = self.fix_hint(f, ep.effective[i])
                 self.add(
                     Finding(
                         "MEDIUM",
@@ -640,7 +747,11 @@ class Analyzer:
                         apps=labels,
                         who=self.lines(self.who(f)),
                         witness=self.witness_text(f),
-                        data={"when": self.lines(self.when(f)), "stricter_rule": stricter.rule.name},
+                        data={
+                            "when": self.lines(self.when(f)),
+                            "stricter_rule": stricter.rule.name,
+                            "fix_hint": hint,
+                        },
                     )
                 )
 

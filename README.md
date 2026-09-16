@@ -85,6 +85,7 @@ okta-policy-analyzer fetch --org https://acme.okta.com -o snapshots/acme        
 okta-policy-analyzer analyze snapshots/acme
 okta-policy-analyzer analyze snapshots/acme --format markdown -o report.md --assertions policy-assertions.yaml
 okta-policy-analyzer analyze snapshots/acme --format json --fail-on-high                 # CI gate
+okta-policy-analyzer analyze snapshots/acme --format sarif -o okta.sarif                 # GitHub code scanning
 
 # 3. Verify assertions (exit code 1 on violation)
 okta-policy-analyzer verify snapshots/acme --assertions policy-assertions.yaml
@@ -154,8 +155,13 @@ Expectations: `access`, `min_strength`, `max_strength`, `passwordless: false`, `
 | `redundant-rule`, `catch-all-weaker-than-rules`, `dangling-group`, `opaque-expression`, `unsupported-condition`, `session-without-mfa` | LOW | hygiene and transparency |
 | `app-without-policy`, `ambiguous-people-condition`, `session-deny`, `no-phishing-resistant-enrollment`, ... | INFO | context |
 
-Every finding carries *who* (a complete DNF over groups/attributes), *when* (context) where relevant, and a
-witness world.
+Every finding carries *who* (a complete DNF over groups/attributes), *when* (context) where relevant, a
+witness world and, for bypass and downgrade findings, a contrastive *fix hint*: the one fact of the witness
+whose change would make the intended rule apply.
+
+The report also contains a **group view**: for every group referenced by a rule, the weakest and strongest
+outcome its members can obtain per policy (members may hold other memberships too), and an executive line
+naming the weakest way into any app.
 
 ## Semantics and assumptions
 

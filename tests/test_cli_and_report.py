@@ -151,3 +151,14 @@ def test_all_subcommands_registered() -> None:
     assert ns.func.__name__ == "cmd_diff"
     ns = parser.parse_args(["analyze", "snap", "-j", "4", "--no-cubes", "--combined-who"])
     assert ns.jobs == 4 and ns.combined_who
+
+
+def test_sarif_output(tmp_path) -> None:
+    out = tmp_path / "r.sarif"
+    assert main(["analyze", FIXTURE, "--format", "sarif", "-o", str(out), "--no-cubes"]) == 0
+    sarif = json.loads(out.read_text())
+    assert sarif["version"] == "2.1.0"
+    run = sarif["runs"][0]
+    assert run["tool"]["driver"]["name"] == "okta-policy-analyzer"
+    assert any(r["ruleId"] == "deny-bypassed" and r["level"] == "error" for r in run["results"])
+    assert {r["id"] for r in run["tool"]["driver"]["rules"]} == {r["ruleId"] for r in run["results"]}

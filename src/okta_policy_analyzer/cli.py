@@ -96,7 +96,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 
 def cmd_analyze(args: argparse.Namespace) -> int:
     from .assertions import AssertionChecker, load_assertions
-    from .report import findings_summary, render_console, render_markdown
+    from .report import findings_summary, render_console, render_markdown, render_sarif
 
     analyzer = _analyzer(args)
     result = analyzer.run(jobs=max(1, args.jobs))
@@ -111,6 +111,8 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         _emit(text, args.output)
     elif args.format == "markdown":
         _emit(render_markdown(result, assertions), args.output)
+    elif args.format == "sarif":
+        _emit(render_sarif(result), args.output)
     else:
         if args.output:
             with open(args.output, "w", encoding="utf-8") as fh:
@@ -511,7 +513,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     a = sub.add_parser("analyze", help="analyze a snapshot: who can do what, findings, assertions")
     analysis_opts(a)
-    a.add_argument("--format", choices=["text", "markdown", "json"], default="text")
+    a.add_argument("--format", choices=["text", "markdown", "json", "sarif"], default="text")
     a.add_argument("-o", "--output")
     a.add_argument("--fail-on-high", action="store_true", help="exit 1 when HIGH findings exist")
     a.add_argument("--fail-on-violation", action="store_true", help="exit 1 when an assertion is violated")
