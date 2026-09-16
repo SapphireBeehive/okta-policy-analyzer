@@ -187,6 +187,7 @@ class TenantLoader:
                 type=a.get("type") or "",
                 status=_status(a.get("status")),
                 methods=methods,
+                allowed_for=str(((a.get("settings") or {}).get("allowedFor")) or "any"),
             )
             t.authenticators[auth.key] = auth
         for ut in self.snap.user_types:

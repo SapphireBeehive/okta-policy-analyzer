@@ -1,0 +1,67 @@
+assertions:
+  - name: contractors-denied-off-network
+    description: Contractors may only reach standard apps from the corporate network or VPN
+    apps: [Salesforce, GitHub]
+    when:
+      groups_any: [Contractors]
+      zones_none: [Corporate Network, VPN]
+    expect:
+      access: DENY
+
+  - name: admins-phishing-resistant
+    description: Administrators always need phishing-resistant MFA for the Admin Console
+    apps: [Okta Admin Console]
+    when:
+      groups_any: [Okta Administrators]
+    expect:
+      min_strength: TWO_FA_PHISHING_RESISTANT
+
+  - name: service-accounts-never-interactive
+    apps: [Salesforce]
+    when:
+      groups_any: [Service Accounts]
+    expect:
+      access: DENY
+
+  - name: payroll-needs-two-factors
+    policy: Payroll policy
+    when: {}
+    expect:
+      min_strength: TWO_FA
+
+  - name: no-password-only-anywhere
+    all_apps: true
+    when: {}
+    expect:
+      min_strength: TWO_FA
+
+  - name: high-risk-always-denied
+    apps: [Salesforce]
+    when:
+      risk: HIGH
+    expect:
+      access: DENY
+
+  - name: managed-device-rule-is-what-fires
+    apps: [GitHub]
+    when:
+      managed: true
+      assurance_any: [macOS secure, Windows secure]
+      groups_none: [Service Accounts]
+    expect:
+      rules_any: ["Managed device passwordless"]
+
+  - name: dashboard-with-session-policy
+    apps: [Okta Dashboard]
+    when: {}
+    expect:
+      min_strength: TWO_FA
+    with_session_policy: true
+
+  - name: vacuous-premise
+    apps: [Payroll (Workday)]
+    when:
+      groups_all: [Contractors]
+      groups_none: [Contractors]
+    expect:
+      access: DENY

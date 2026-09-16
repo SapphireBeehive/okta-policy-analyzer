@@ -76,6 +76,11 @@ class PolicyEncoder:
             self._match_cache[rule.id] = self._conditions(rule.conditions)
         return self._match_cache[rule.id]
 
+    def people(self, rule: Rule) -> z3.BoolRef:
+        """Only the people (users/groups/user type) part of a rule's conditions: the population it targets."""
+        c = rule.conditions
+        return self._conditions(RuleConditions(people=c.people, user_type=c.user_type))
+
     def _conditions(self, c: RuleConditions) -> z3.BoolRef:
         u = self.u
         parts: list[z3.BoolRef] = []

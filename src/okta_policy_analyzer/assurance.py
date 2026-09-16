@@ -35,8 +35,10 @@ from .model import (
     Constraint,
     ConstraintSet,
     FactorMode,
+    PrimaryFactor,
     Requirement,
     Rule,
+    SignOnAction,
     Status,
     Tenant,
     VerificationMethod,
@@ -230,6 +232,11 @@ class Catalogue:
                     f"authenticator {auth.key!r} is not in the characteristics table; assumed possession, not phishing-resistant"
                 )
             if auth.status != Status.ACTIVE:
+                continue
+            if not auth.usable_for_sign_in():
+                warnings.append(
+                    f"authenticator {auth.key!r} is allowed for {auth.allowed_for!r} only; not usable for app sign-in"
+                )
                 continue
             active_methods = set(auth.active_methods())
             for spec in candidates:
@@ -466,3 +473,42 @@ def all_pairs(
     specs: list[MethodSpec],
 ) -> list[tuple[MethodSpec, MethodSpec]]:  # pragma: no cover - helper for docs
     return list(combinations(specs, 2))
+
+
+# ------------------------------------------------------------------------------------------ session composition
+
+
+def combined_strength(signon: SignOnAction, path: AuthPath) -> Strength:
+    """Strength of an authentication path once the global session policy's requirements are added.
+
+    Factors verified for the Okta session are credited towards the app policy, so the user experiences the
+    *union* of both requirements: ``PASSWORD_IDP`` forces a knowledge factor even for a passwordless app rule,
+    and ``requireFactor`` forces a second factor type even for a 1FA app rule. The global session policy never
+    constrains *which* possession factor is used, so phishing resistance comes from the app path alone.
+    """
+    if signon.access == Access.DENY:
+        return Strength.DENY
+    count = path.factor_count
+    if signon.primary_factor == PrimaryFactor.PASSWORD_IDP and not any(
+        m.factor_type == KNOWLEDGE for m in path.methods
+    ):
+        count += 1  # the session requires a password (or IdP assertion) in addition
+    if signon.require_factor and count < 2:
+        count = 2
+    if count >= 2:
+        if path.phishing_resistant:
+            return (
+                Strength.TWO_FA_PHISHING_RESISTANT_HARDWARE
+                if path.hardware_protected
+                else Strength.TWO_FA_PHISHING_RESISTANT
+            )
+        return Strength.TWO_FA
+    return path.strength
+
+
+def combined_rule_strength(signon: SignOnAction, assurance: RuleAssurance) -> Strength:
+    if assurance.access == Access.DENY or signon.access == Access.DENY:
+        return Strength.DENY
+    if not assurance.paths:
+        return Strength.NO_PATH
+    return min(combined_strength(signon, p) for p in assurance.paths)

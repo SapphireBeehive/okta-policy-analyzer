@@ -155,6 +155,12 @@ class Authenticator:
     type: str  # password app security_key email phone security_question federated ...
     status: Status = Status.ACTIVE
     methods: list[AuthenticatorMethod] = field(default_factory=list)
+    allowed_for: str = (
+        "any"  # settings.allowedFor: any | sso | recovery | none (email/phone/security question)
+    )
+
+    def usable_for_sign_in(self) -> bool:
+        return self.status == Status.ACTIVE and self.allowed_for.lower() not in ("none", "recovery")
 
     def active_methods(self) -> list[str]:
         return [m.type for m in self.methods if m.status == Status.ACTIVE]

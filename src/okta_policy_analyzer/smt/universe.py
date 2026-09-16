@@ -471,7 +471,8 @@ class Universe:
             return ("member of " if (value is True) == positive else "not member of ") + t.group_name(g)
         if name.startswith("user_is["):
             u = name[8:-1]
-            return ("is user " if (value is True) == positive else "is not user ") + u
+            login = next((usr.login for usr in t.users if usr.id == u), u)
+            return ("is user " if (value is True) == positive else "is not user ") + login
         if name.startswith("zone["):
             z = name[5:-1]
             return ("in zone " if (value is True) == positive else "not in zone ") + t.zone_name(z)

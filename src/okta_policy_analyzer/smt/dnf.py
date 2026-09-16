@@ -61,7 +61,8 @@ def project(
 ) -> z3.BoolRef:
     """∃ eliminate. (axioms ∧ formula), quantifier-free."""
     body = z3.And(*axioms, formula) if axioms else formula
-    elim = [v for v in eliminate if _occurs(v, body)]
+    names = var_names(formula) | (axiom_var_names(axioms) if axioms else set())
+    elim = [v for v in eliminate if v.decl().name() in names]
     if not elim:
         return z3.simplify(body)
     q = z3.Exists(elim, body)
@@ -76,8 +77,9 @@ def project(
     return q  # give up: callers must handle a quantified result (they use a solver, which still works)
 
 
-def _occurs(var: z3.ExprRef, expr: z3.ExprRef) -> bool:
-    name = var.decl().name()
+def var_names(expr: z3.ExprRef) -> set[str]:
+    """Names of all uninterpreted constants occurring in ``expr`` (one traversal)."""
+    names: set[str] = set()
     seen: set[int] = set()
     stack = [expr]
     while stack:
@@ -85,13 +87,27 @@ def _occurs(var: z3.ExprRef, expr: z3.ExprRef) -> bool:
         if e.get_id() in seen:
             continue
         seen.add(e.get_id())
-        if z3.is_const(e) and e.decl().name() == name:
-            return True
-        if z3.is_app(e):
-            stack.extend(e.children())
-        elif z3.is_quantifier(e):
+        if z3.is_quantifier(e):
             stack.append(e.body())
-    return False
+            continue
+        if z3.is_const(e) and e.decl().kind() == z3.Z3_OP_UNINTERPRETED:
+            names.add(e.decl().name())
+        elif z3.is_app(e):
+            stack.extend(e.children())
+    return names
+
+
+_AXIOM_NAMES: dict[tuple[int, ...], set[str]] = {}
+
+
+def axiom_var_names(axioms: Sequence[z3.BoolRef]) -> set[str]:
+    """Cached variable names of an axiom list (axiom lists are reused across many queries)."""
+    key = tuple(a.get_id() for a in axioms)
+    if key not in _AXIOM_NAMES:
+        if len(_AXIOM_NAMES) > 64:
+            _AXIOM_NAMES.clear()
+        _AXIOM_NAMES[key] = set().union(*(var_names(a) for a in axioms)) if axioms else set()
+    return _AXIOM_NAMES[key]
 
 
 def _has_quantifier(expr: z3.ExprRef) -> bool:
@@ -129,7 +145,8 @@ def prime_implicants(
     enum = z3.Solver()
     enum.add(ax)
     enum.add(formula)
-    relevant = [v for v in variables if _occurs(v, formula) or _occurs(v, ax)]
+    names = var_names(formula) | (axiom_var_names(axioms) if axioms else set())
+    relevant = [v for v in variables if v.decl().name() in names]
     # Literals are dropped in list order during minimisation: put derived facts (attributes, predicates,
     # specific users) first so that cubes are preferably expressed in terms of groups and context.
     relevant.sort(key=_drop_priority)
